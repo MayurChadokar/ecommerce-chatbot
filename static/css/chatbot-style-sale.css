@@ -1051,6 +1051,32 @@ body {
 .chat-header h6 { font-size: 1.1rem; }
 .chat-header .avatar { width: 44px; height: 44px; font-size: 20px; }
 
+.chat-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-left: auto;
+}
+
+.chat-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 12px;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.chat-back-btn:hover,
+.chat-back-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.28);
+}
+
 /* Messages fill the card comfortably */
 .chat-messages {
     padding: 22px 26px 10px;

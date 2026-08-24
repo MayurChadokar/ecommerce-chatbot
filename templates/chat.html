@@ -40,9 +40,19 @@
                     </small>
                 </div>
             </div>
-            <button class="btn btn-link text-white p-0" id="minimizeChat">
-                <i class="fas fa-minus"></i>
-            </button>
+            <div class="chat-header-actions">
+                <button
+                    type="button"
+                    class="chat-back-btn"
+                    aria-label="Back to Lotus Electronics"
+                    onclick="window.opener ? window.close() : window.location.assign('https://www.lotuselectronics.com/')">
+                    <i class="fas fa-arrow-left"></i>
+                    <span>Back</span>
+                </button>
+                <button class="btn btn-link text-white p-0" id="minimizeChat" aria-label="Minimize chat">
+                    <i class="fas fa-minus"></i>
+                </button>
+            </div>
         </div>
 
         <!-- Quick Actions -->
