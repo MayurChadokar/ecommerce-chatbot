@@ -504,26 +504,6 @@ def call_tool(state: AgentState):
     return {"messages": outputs}
 
 
-def _strip_signature(message) -> None:
-    """Remove Gemini thought-signature blobs from a message in place.
-
-    Thinking is disabled, so these are never needed on later turns; dropping them
-    keeps stored/re-sent history lean on tokens.
-    """
-    try:
-        ak = getattr(message, "additional_kwargs", None)
-        if isinstance(ak, dict):
-            ak.pop("signature", None)
-        content = getattr(message, "content", None)
-        if isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict):
-                    part.pop("extras", None)
-                    part.pop("signature", None)
-    except Exception:
-        pass
-
-
 def call_model(
     state: AgentState,
     config: RunnableConfig,
@@ -581,11 +561,18 @@ def call_model(
                 content_preview = response.content[:100] + "..." if len(response.content) > 100 else response.content
                 print(f"📝 Response content preview: {content_preview}")
         
-        # Drop any residual thought-signature so it isn't stored/re-sent (tokens)
-        _strip_signature(response)
+        # Gemini requires the original AI tool-call message, including its
+        # thought_signature, when the tool result is sent back to the model.
+        # Do not mutate ``response`` before LangGraph finishes this tool cycle.
 
-        # Save the new response to Redis (only HumanMessage and AIMessage)
-        if hasattr(response, 'type') and response.type == 'ai':
+        # Persist only final assistant text. Saving an AI tool-call without its
+        # matching ToolMessage creates an invalid/incomplete history on the next
+        # request (ToolMessages are intentionally not stored in Redis).
+        if (
+            hasattr(response, 'type')
+            and response.type == 'ai'
+            and not getattr(response, 'tool_calls', None)
+        ):
             redis_memory.add_message_to_user(user_id, response)
 
         # We return a list, because this will get added to the existing messages state using the add_messages reducer
