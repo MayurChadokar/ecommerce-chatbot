@@ -9,6 +9,7 @@ way. Some IDs intentionally overlap the real search results (e.g. 39422, 39831).
 """
 
 from typing import Any, Dict, List, Optional
+from product_pricing import pricing_fields
 
 _IMG = "https://cdn.lotuselectronics.com/webpimages"
 
@@ -271,6 +272,7 @@ def remember_products(products: Any) -> None:
             "image": p.get("product_image") or p.get("image") or "",
             "specs": {},
             "features": p.get("features") or [],
+            **pricing_fields(p),
         }
 
 
@@ -456,6 +458,8 @@ def build_comparison(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
         "differences": differences or ["Both products share very similar specifications."],
         "spec_table": spec_table,
         "verdict": verdict,
+        **{f"{key}_{side}": value for side, product in (("a", a), ("b", b))
+           for key, value in pricing_fields(product).items()},
     }
 
 

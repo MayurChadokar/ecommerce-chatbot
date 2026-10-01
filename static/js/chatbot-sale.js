@@ -144,45 +144,106 @@ class ChatBot {
         this.scrollToBottom();
         this.messageCount++;
     }
-    addProductCard(product) {
-        const cardDiv = document.createElement('div');
-        cardDiv.className = 'product-card fade-in';
-        
-        // Map the correct field names from backend
-        const safeName = product.product_name || product.name || 'Product';
-        const words = safeName.split(' ');
-        const productName = words.length > 8 ? words.slice(0, 8).join(' ') + '...' : safeName;
-        
-        // Use product_image field from backend
-        const imageUrl = product.product_image || product.image || product.first_image || '';
-        
-        // Use product_mrp field from backend
-        const price = product.product_mrp || product.price || 'Price not available';
-        
-        // Use product_url field from backend
-        const productLink = product.product_url || product.link || '#';
+    renderProductPricing(product) {
+        // Lotus uses product_msrp for list MRP and product_mrp for online selling.
+        const parsePrice = value => {
+            if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? value : null;
+            if (typeof value !== 'string') return null;
+            const text = value.trim().replace(/^(?:₹|INR|Rs\.?)\s*/i, '');
+            if (!/^(?:\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{1,2})?$/.test(text)) return null;
+            const amount = Number(text.replace(/,/g, ''));
+            return Number.isFinite(amount) && amount > 0 ? amount : null;
+        };
+        const firstPrice = values => values.map(parsePrice).find(value => value !== null) ?? null;
+        const money = value => new Intl.NumberFormat('en-IN', {
+            style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2
+        }).format(value);
+        const mrp = firstPrice([product.mrp, product.product_msrp]);
+        const selling = firstPrice([product.selling_price, product.product_selling_price, product.sale_price, product.product_mrp]);
+        const legacy = firstPrice([product.price]);
+        const amount = selling ?? legacy;
 
+        const saving = mrp !== null && selling !== null && mrp > selling
+            ? Math.round((mrp - selling) * 100) / 100 : 0;
+        const label = selling !== null || legacy === null ? 'Online Price' : 'Listed price';
+        const reference = `<span class="price-mrp">MRP ${mrp !== null
+            ? saving > 0 ? `<s>${money(mrp)}</s>` : `<span>${money(mrp)}</span>`
+            : '<span>Not available</span>'}</span>`;
+        const savings = mrp !== null && selling !== null && mrp >= selling
+            ? `<div class="price-saving">You Save <strong>${money(saving)}</strong></div>` : '';
+        return `<div class="product-pricing">
+            <span class="price-label">${label}</span>
+            <div class="price-breakdown">${reference}</div>
+            <strong class="price-amount">${amount !== null ? money(amount) : 'Not available'}</strong>
+            ${savings}
+            ${mrp !== null ? '<p class="price-note">MRP (Inclusive of All Taxes)</p>' : ''}
+            ${selling === null ? '<p class="price-note">Confirm the current selling price.</p>' : ''}
+        </div>`;
+    }
+
+    addProductCard(product) {
+        if (!product || typeof product !== 'object') return;
+        const text = value => typeof value === 'string' ? value.trim() : '';
+        const escape = value => String(value).replace(/[&<>"']/g, char => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[char]));
+        const safeUrl = value => {
+            if (!text(value)) return '';
+            try {
+                const url = new URL(value, window.location.origin);
+                return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+            } catch { return ''; }
+        };
+        const name = text(product.product_name) || text(product.name) || 'Product';
+        const imageUrl = safeUrl(product.product_image || product.image || product.first_image);
+        const productLink = safeUrl(product.product_url || product.link);
+        let highlights = Array.isArray(product.features) ? product.features.map(text).filter(Boolean) : [];
+        if (!highlights.length && Array.isArray(product.product_specification)) {
+            highlights = product.product_specification
+                .filter(spec => spec && text(spec.fkey) && text(spec.fvalue))
+                .map(spec => `${spec.fkey}: ${spec.fvalue}`);
+        }
+        // If feature data is absent, repeat only specifications explicitly in the name.
+        if (!highlights.length) {
+            const patterns = [/\b\d+\s*GB\s*RAM\b/i, /\b\d+\s*(?:GB|TB)\s*(?:Storage(?:\/ROM)?|SSD|HDD)\b/i,
+                /\b\d+(?:\.\d+)?\s*(?:inch(?:es)?|cm)\b/i, /\b(?:Full HD|4K|8K|OLED|QLED|AMOLED)\b/i,
+                /\b\d+(?:\.\d+)?\s*(?:Ton|kg|Litres?|Liters?)\b/i];
+            highlights = patterns.map(pattern => name.match(pattern)?.[0]).filter(Boolean);
+        }
+        highlights = [...new Set(highlights)].slice(0, 3);
+        const cardDiv = document.createElement('article');
+        cardDiv.className = 'product-card product-result fade-in';
         cardDiv.innerHTML = `
-            <div class="card mb-2 shadow-sm border">
-                <div class="row g-0">
-                    <div class="col-4 product-image">
-                        <img src="${imageUrl}" alt="${safeName}" class="img-fluid rounded-start" onerror="this.style.display='none'" />
-                    </div>
-                    <div class="col-8">
-                        <div class="card-body p-2">
-                            <p class="card-title mb-1" style="font-size: 0.9rem; font-weight: 600;">${productName}</p>
-                            <p class="card-text mb-1 fw-bold text-success">${price}</p>
-                            ${product.features?.length
-                ? `<ul class="product-features mb-2" style="font-size: 0.8rem; margin: 0; padding-left: 1rem;">${product.features.slice(0, 3).map(f => `<li style="margin-bottom: 2px;">${f}</li>`).join('')}</ul>`
-                : ''
-            }
-            <a href="${productLink}" target="_blank" class="btn btn-sm btn-outline-primary">View Product</a>
+            <div class="card product-result-card">
+                <div class="product-result-top">
+                    <div class="product-result-media">
+                        <div class="product-result-fallback" ${imageUrl ? 'hidden' : ''}>
+                            <i class="far fa-image" aria-hidden="true"></i><span>Image unavailable</span>
                         </div>
+                        ${imageUrl ? `<img src="${escape(imageUrl)}" alt="${escape(name)}" loading="lazy" decoding="async">` : ''}
+                    </div>
+                    <div class="product-result-info">
+                        <span class="product-result-eyebrow">LOTUS ELECTRONICS</span>
+                        <h3 class="product-result-title">${escape(name)}</h3>
+                        ${highlights.length ? `<ul class="product-result-highlights" aria-label="Key highlights">${highlights.map(feature => `<li>${escape(feature)}</li>`).join('')}</ul>` : ''}
                     </div>
                 </div>
-            </div>
-        `;
-
+                ${this.renderProductPricing(product)}
+                <div class="product-result-actions">
+                    ${productLink ? `<a href="${escape(productLink)}" target="_blank" rel="noopener noreferrer" class="product-result-view" aria-label="View ${escape(name)} on Lotus Electronics (opens in a new tab)">View product <i class="fas fa-arrow-up-right-from-square" aria-hidden="true"></i></a>` : ''}
+                    <button type="button" class="product-result-ask" aria-label="Ask about ${escape(name)}"><i class="far fa-comment-dots" aria-hidden="true"></i> Ask about this</button>
+                </div>
+            </div>`;
+        const img = cardDiv.querySelector('img');
+        if (img) img.addEventListener('error', () => {
+            img.hidden = true;
+            cardDiv.querySelector('.product-result-fallback').hidden = false;
+        });
+        cardDiv.querySelector('.product-result-ask').addEventListener('click', () => {
+            if (this.isTyping || this.awaitingPhone || this.awaitingOTP) return;
+            this.messageInput.value = `Show me the details and specifications for ${name}`;
+            this.sendMessage();
+        });
         this.chatMessages.appendChild(cardDiv);
         this.scrollToBottom();
     }
@@ -203,7 +264,7 @@ class ChatBot {
         
         const product = productDetails;
         const productName = product.product_name || 'Product Details';
-        const price = product.product_mrp || 'Price not available';
+        const pricingHtml = this.renderProductPricing(product);
         const imageUrl = product.product_image || '';
         const inStock = product.instock || 'Unknown';
         const description = product.meta_desc || '';
@@ -279,7 +340,7 @@ class ChatBot {
                         </div>
                         <div class="col-md-8">
                             <h5 class="card-title text-dark mb-2">${productName}</h5>
-                            <h4 class="text-success fw-bold mb-3">₹${price}</h4>
+                            ${pricingHtml}
                         </div>
                         <div>
                         ${specificationsHtml}
@@ -432,34 +493,71 @@ class ChatBot {
         const cardDiv = document.createElement('div');
         cardDiv.className = 'comparison-card fade-in';
 
-        const rows = Array.isArray(item.spec_table) ? item.spec_table : [];
-        const rowsHtml = rows.map(r => `
-            <tr>
-                <td class="cmp-feature">${r.feature}</td>
-                <td>${r.a}</td>
-                <td>${r.b}</td>
-            </tr>`).join('');
-
-        const diffsHtml = Array.isArray(item.differences) && item.differences.length
-            ? `<ul class="cmp-diffs">${item.differences.map(d => `<li>${d}</li>`).join('')}</ul>`
-            : '';
+        // Present the comparison payload as supplied; do not infer a winner or specs.
+        const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[char]);
+        const hasValue = value => value != null && String(value).trim() !== '' &&
+            !['-', '—', 'n/a', 'null', 'undefined'].includes(String(value).trim().toLowerCase());
+        const formatPrice = value => typeof value === 'number' && Number.isFinite(value)
+            ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value)
+            : String(value);
+        const imageSource = value => {
+            if (typeof value !== 'string' || !value.trim()) return '';
+            try {
+                const url = new URL(value, window.location.origin);
+                return ['https:', 'http:'].includes(url.protocol) ? url.href : '';
+            } catch { return ''; }
+        };
+        const rows = (Array.isArray(item.spec_table) ? item.spec_table : [])
+            .filter(row => row && typeof row === 'object' && hasValue(row.feature));
+        const priceRow = rows.find(row => /^price$/i.test(String(row.feature).trim()));
+        const specs = rows.filter(row => row !== priceRow);
+        const names = [item.name || 'Product A', item.vs_name || 'Product B'];
+        const products = ['a', 'b'].map((side, index) => {
+            const image = imageSource(item[`image_${side}`]);
+            const price = hasValue(item[`price_${side}`]) ? item[`price_${side}`] : priceRow?.[side];
+            const highlights = specs.filter(row => hasValue(row[side])).slice(0, 3);
+            return `<article class="cmp-product cmp-product-${side}" aria-label="${escape(names[index])}">
+                <div class="cmp-product-image">
+                    <span class="cmp-option">OPTION ${index + 1}</span>
+                    <span class="cmp-image-fallback"${image ? ' hidden' : ''}><i class="fas fa-image" aria-hidden="true"></i><span>Image unavailable</span></span>
+                    ${image ? `<img src="${escape(image)}" alt="${escape(names[index])}" loading="lazy" decoding="async">` : ''}
+                </div>
+                <div class="cmp-product-info">
+                    <h3>${escape(names[index])}</h3>
+                    ${hasValue(item[`selling_price_${side}`]) || hasValue(item[`mrp_${side}`])
+                        ? this.renderProductPricing({mrp: item[`mrp_${side}`], selling_price: item[`selling_price_${side}`], store_offer_price: item[`store_offer_price_${side}`]})
+                        : `<p class="cmp-price${hasValue(price) ? '' : ' cmp-price-missing'}">${hasValue(price) ? escape(formatPrice(price)) : 'Price unavailable'}</p>`}
+                    ${highlights.length ? `<ul class="cmp-highlights">${highlights.map(row => `<li><span>${escape(row.feature)}</span><strong>${escape(row[side])}</strong></li>`).join('')}</ul>` : ''}
+                </div>
+            </article>`;
+        }).join('');
+        const differences = (Array.isArray(item.differences) ? item.differences : []).filter(hasValue);
+        const rowsHtml = rows.map(row => {
+            const differs = hasValue(row.a) && hasValue(row.b) && String(row.a).trim() !== String(row.b).trim();
+            return `<tr${differs ? ' class="cmp-row-different"' : ''}>
+                <th scope="row" class="cmp-feature">${escape(row.feature)}</th>
+                <td>${hasValue(row.a) ? escape(row.a) : 'Not provided'}</td>
+                <td>${hasValue(row.b) ? escape(row.b) : 'Not provided'}</td>
+            </tr>`;
+        }).join('');
 
         cardDiv.innerHTML = `
-            <div class="cmp-wrap">
-                <div class="cmp-head"><i class="fas fa-code-compare"></i> Product Comparison</div>
-                <table class="cmp-table">
-                    <thead>
-                        <tr>
-                            <th></th>
-                            <th>${item.name || 'Product A'}</th>
-                            <th>${item.vs_name || 'Product B'}</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rowsHtml}</tbody>
-                </table>
-                ${diffsHtml}
-                ${item.verdict ? `<div class="cmp-verdict"><i class="fas fa-circle-check"></i> ${item.verdict}</div>` : ''}
-            </div>`;
+            <section class="cmp-wrap cmp-premium" aria-label="Product comparison">
+                <header class="cmp-intro"><span class="cmp-intro-icon"><i class="fas fa-code-compare" aria-hidden="true"></i></span><div><span class="cmp-eyebrow">A CLOSER LOOK</span><h2>Find your better fit.</h2><p>Two options. The details that matter.</p></div><span class="cmp-count">2 PRODUCTS</span></header>
+                <div class="cmp-products">${products}<span class="cmp-versus" aria-hidden="true">VS</span></div>
+                ${differences.length ? `<section class="cmp-differences"><h3><i class="fas fa-bolt" aria-hidden="true"></i> Key differences</h3><ul>${differences.map(difference => `<li><span class="cmp-difference-dot" aria-hidden="true"></span><span>${escape(difference)}</span></li>`).join('')}</ul></section>` : ''}
+                ${rows.length ? `<details class="cmp-specs"><summary><span><i class="fas fa-list" aria-hidden="true"></i> Full specification comparison</span><span class="cmp-expand-icon" aria-hidden="true">+</span></summary><div class="cmp-table-scroll" role="region" aria-label="Full product specifications" tabindex="0"><table class="cmp-table"><caption class="visually-hidden">Specifications for ${escape(names[0])} and ${escape(names[1])}</caption><thead><tr><th scope="col">Feature</th><th scope="col">${escape(names[0])}</th><th scope="col">${escape(names[1])}</th></tr></thead><tbody>${rowsHtml}</tbody></table></div><p class="cmp-table-note">Shaded rows show different specifications.</p></details>` : ''}
+                ${hasValue(item.verdict) ? `<section class="cmp-recommendation"><span class="cmp-recommendation-icon"><i class="fas fa-lightbulb" aria-hidden="true"></i></span><div><h3>The Lotus take</h3><p>${escape(item.verdict)}</p></div></section>` : ''}
+            </section>`;
+
+        cardDiv.querySelectorAll('.cmp-product-image img').forEach(image => {
+            image.addEventListener('error', () => {
+                image.hidden = true;
+                image.previousElementSibling.hidden = false;
+            }, { once: true });
+        });
 
         this.chatMessages.appendChild(cardDiv);
         this.scrollToBottom();
@@ -500,6 +598,47 @@ class ChatBot {
             </div>`;
 
         this.chatMessages.appendChild(cardDiv);
+        this.scrollToBottom();
+    }
+
+    addBulkEnquiryCard(enquiry) {
+        const card = document.createElement('article');
+        card.className = 'bulk-enquiry-card fade-in';
+        const append = (tag, className, text) => {
+            const element = document.createElement(tag);
+            element.className = className;
+            element.textContent = text;
+            card.appendChild(element);
+            return element;
+        };
+        append('h3', 'bulk-enquiry-title', 'Bulk enquiry saved');
+        append('p', 'bulk-enquiry-id', enquiry.enquiry_id);
+        append('p', 'bulk-enquiry-status', enquiry.status);
+        append('p', 'bulk-enquiry-product', enquiry.product_requirement);
+        const details = document.createElement('dl');
+        details.className = 'bulk-enquiry-details';
+        [
+            ['Quantity', `${enquiry.quantity} units`],
+            ['Delivery city', enquiry.city],
+            ['Company', enquiry.company_name],
+            ['Contact name', enquiry.contact_name],
+            ['Mobile', enquiry.phone],
+            ['Email', enquiry.email],
+            ['Delivery PIN', enquiry.pincode],
+            ['GST invoice', enquiry.gst_requirement],
+            ['Purpose', enquiry.purpose],
+            ['Budget per unit', enquiry.budget_per_unit && new Intl.NumberFormat('en-IN', {style: 'currency', currency: 'INR'}).format(enquiry.budget_per_unit)],
+            ['Requested by', enquiry.required_by]
+        ].filter(([, value]) => value !== null && value !== undefined && value !== '').forEach(([label, value]) => {
+            const term = document.createElement('dt');
+            const description = document.createElement('dd');
+            term.textContent = label;
+            description.textContent = value;
+            details.append(term, description);
+        });
+        card.appendChild(details);
+        append('p', 'bulk-enquiry-notice', 'Quotation request only. Final pricing, stock and delivery are not yet confirmed.');
+        this.chatMessages.appendChild(card);
         this.scrollToBottom();
     }
 
@@ -561,6 +700,7 @@ class ChatBot {
         const recommendations = responseData.recommendations;
         const order = responseData.order;
         const ticket = responseData.ticket;
+        const bulkEnquiry = responseData.bulk_enquiry;
         const end = responseData.end;
 
         // If stores are present, clean up the answer to avoid duplication
@@ -635,6 +775,9 @@ class ChatBot {
         }
         if (ticket && typeof ticket === 'object' && ticket.ticket_id) {
             this.addTicketCard(ticket);
+        }
+        if (bulkEnquiry && typeof bulkEnquiry === 'object' && bulkEnquiry.enquiry_id) {
+            this.addBulkEnquiryCard(bulkEnquiry);
         }
         if (end) this.addMessage(end, 'bot');
     }

@@ -12,13 +12,17 @@ from pydantic import BaseModel, Field
 from langchain_core.tools import tool
 
 import catalog
+from product_pricing import pricing_fields
 from tools.Product_details import get_filtered_product_details_tool
+from live_product_enrichment import enabled as live_enabled
+from product_pricing import price_number
 
 # Only keep a handful of meaningful spec rows from the (often noisy) live API
 _MAX_LIVE_SPECS = 8
 
 
 class CompareInput(BaseModel):
+    city: str = Field("INDORE", min_length=1, max_length=100, description="Customer city for live verification")
     product_ids: List[int] = Field(
         ...,
         description="List of exactly two product IDs to compare, e.g. [39422, 39831]",
@@ -50,19 +54,24 @@ def _normalize_live(detail: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "product_name": name,
         "brand": name.split()[0] if name else "Product",
-        "price": _parse_price(detail.get("product_mrp")),
+        "price": price_number(detail.get("selling_price") or detail.get("product_mrp")) if live_enabled() else _parse_price(detail.get("product_mrp")),
         "image": detail.get("product_image") or "",
         "specs": specs,
+        **pricing_fields(detail),
     }
 
 
-def _resolve(product_id: Any) -> Optional[Dict[str, Any]]:
+def _resolve(product_id: Any, city: str = "INDORE") -> Optional[Dict[str, Any]]:
     """Resolve a product record for comparison.
 
     Order: static catalog (rich specs) -> products the user has already seen in
     search/browse (name/price/features) -> live detail API. This makes comparison
     work for any product the customer has actually been shown.
     """
+    if live_enabled():
+        # A demo record must not shadow a real product with the same ID.
+        detail = get_filtered_product_details_tool.invoke({"product_id": int(product_id), "city": city})
+        return _normalize_live(detail) if isinstance(detail, dict) and not detail.get("error") else None
     record = catalog.get_product(product_id)
     if record:
         return record
@@ -82,7 +91,7 @@ def _resolve(product_id: Any) -> Optional[Dict[str, Any]]:
 
 
 @tool("compare_products", args_schema=CompareInput, return_direct=False)
-def compare_products_tool(product_ids: List[int]) -> Dict[str, Any]:
+def compare_products_tool(product_ids: List[int], city: str = "INDORE") -> Dict[str, Any]:
     """
     Compare two products side by side in ONE call.
 
@@ -94,8 +103,8 @@ def compare_products_tool(product_ids: List[int]) -> Dict[str, Any]:
     if not product_ids or len(product_ids) < 2:
         return {"error": "Please provide two product IDs to compare."}
 
-    a = _resolve(product_ids[0])
-    b = _resolve(product_ids[1])
+    a = _resolve(product_ids[0], city)
+    b = _resolve(product_ids[1], city)
     if not a or not b:
         missing = product_ids[0] if not a else product_ids[1]
         return {"error": f"I couldn't find enough details for product {missing} to compare."}

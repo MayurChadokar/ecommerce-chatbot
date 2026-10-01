@@ -45,11 +45,16 @@ def index():
     return render_template("chat.html")
 
 from chat import chat_with_agent, redis_memory
-from tools.product_search_tool import ProductSearchTool
+from tools.product_search_tool import product_search_instance
 import json
 
 # Initialize the product search tool
-search_tool = ProductSearchTool()
+search_tool = product_search_instance
+
+# Stateless website search uses the same unbound AI client and catalogue.
+from chat import response_model
+from smart_search_api import create_smart_search_blueprint
+app.register_blueprint(create_smart_search_blueprint(search_tool, response_model))
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -107,32 +112,44 @@ def chat():
 
 @app.route("/search", methods=["POST"])
 def direct_search():
-    """Direct product search endpoint using hybrid search"""
+    """Direct product search against the configured Pinecone SQL snapshot."""
     payload = request.get_json(force=True)
     query = payload.get("query")
     top_k = payload.get("top_k", 5)
     price_min = payload.get("price_min")
     price_max = payload.get("price_max")
+    city = payload.get("city", "INDORE")
     
     if not query:
         return jsonify({"error": "Missing 'query' in request"}), 400
+
+    if not isinstance(city, str) or not city.strip() or len(city) > 100:
+        return jsonify({"error": "city must be a non-empty string of at most 100 characters"}), 400
     
     try:
-        # Use the hybrid search directly
+        # All product discovery uses the same Pinecone instance as the chatbot.
         results = search_tool.search_products(
             query=query,
             top_k=min(top_k, 20),  # Limit to 20 max
             price_min=price_min,
-            price_max=price_max
+            price_max=price_max,
+            city=city.strip(),
         )
         
         # Format results for response
-        formatted_response = search_tool.format_results(results)
+        formatted_response = search_tool.format_results(
+            results, query=query, top_k=min(top_k, 20),
+            price_min=price_min, price_max=price_max,
+        )
         data = json.loads(formatted_response)
+
+        if data.get("error"):
+            return jsonify({"status": "error", "search_method": "pinecone",
+                            "query": query, "total_results": 0, "data": data}), 503
         
         response = {
             "status": "success",
-            "search_method": "hybrid",
+            "search_method": "pinecone",
             "query": query,
             "total_results": len(results),
             "data": data
@@ -244,6 +261,12 @@ def admin_orders():
 @admin_required
 def admin_tickets():
     return jsonify(store.get_tickets())
+
+
+@app.route("/admin/api/bulk-enquiries", methods=["GET"])
+@admin_required
+def admin_bulk_enquiries():
+    return jsonify(store.get_bulk_enquiries())
 
 
 if __name__ == "__main__":

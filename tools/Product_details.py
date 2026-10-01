@@ -1,127 +1,107 @@
+"""Live product details with an explicitly unverified index fallback."""
 import os
+from datetime import datetime, timezone
+from typing import Any, Dict
+
 import requests
-from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
-from typing import Optional
 from langchain_core.tools import tool
 
-# Lotus portal auth token expires periodically. Set LOTUS_AUTH_TOKEN in .env to
-# refresh it without editing code; the literal below is only a fallback.
-LOTUS_AUTH_TOKEN = os.getenv(
-    "LOTUS_AUTH_TOKEN",
-    "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiNzA5MDQiLCJpYXQiOjE3NTQzNzg3MjQsImV4cCI6MTc1NDM5NjcyNH0.inays4iDucXwb_ktjjDur4yKdnjXGeIBTn978jtaFto",
-)
+from product_availability import availability_fields
+from product_pricing import pricing_fields
+
+
 class ProductDetailInput(BaseModel):
     product_id: int = Field(..., description="ID of the product to fetch details for")
-    city: Optional[str] = Field("INDORE", description="City name (optional, defaults to INDORE)")
+    city: str = Field("INDORE", description="Customer's city; defaults to INDORE")
 
 
-def _fallback_details(product_id: Any) -> Optional[Dict[str, Any]]:
-    """Return details from the local catalog / seen-products cache.
-
-    Used when the live API can't find a product, so this tool never dead-ends on
-    a product the customer has already been shown.
-    """
+def fetch_live_details(product_id: int, city: str = "INDORE") -> Dict[str, Any]:
+    """Fetch current stock. Auth errors, missing records and timeouts mean unknown."""
+    unavailable = {
+        "product_id": str(product_id),
+        "error": "Live product availability could not be verified. This does not mean out of stock.",
+        "error_code": "availability_unverified",
+        **availability_fields(city=city),
+    }
+    token = os.getenv("LOTUS_AUTH_TOKEN", "").strip()
+    if not token:
+        return unavailable
     try:
-        import catalog
-        rec = catalog.get_product(product_id) or catalog.get_seen(product_id)
-    except Exception:
-        rec = None
-    if not rec:
-        return None
+        response = requests.post(
+            "https://portal.lotuselectronics.com/web-api/home/product_detail",
+            headers={"auth-key": "Web2@!9", "auth-token": token, "end-client": "Lotus-Web"},
+            data={"product_id": str(product_id), "city": city},
+            timeout=(3, 8),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict) or str(payload.get("error", "0")).lower() not in {"0", "false", "none", ""}:
+            return unavailable
+        data = payload.get("data")
+        detail = data.get("product_detail") if isinstance(data, dict) else None
+        if not isinstance(detail, dict) or not detail.get("product_name"):
+            return unavailable
+        if str(detail.get("product_id")) != str(product_id):
+            return unavailable
+        images = detail.get("product_image")
+        image = (images[0] if images else "") if isinstance(images, list) else (images or "")
+        return {
+            **{key: detail.get(key) for key in (
+                "product_id", "product_name", "uri_slug", "product_sku",
+                "product_mrp", "product_specification", "meta_desc", "del",
+            )},
+            "product_image": image,
+            "source": "live_api",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "price_verified": "selling_price" in pricing_fields(detail),
+            "price_source": "live_api" if "selling_price" in pricing_fields(detail) else "unverified",
+            **pricing_fields(detail),
+            **availability_fields(detail.get("instock"), live=True, city=city),
+        }
+    except (requests.RequestException, ValueError):
+        return unavailable
 
-    specs = rec.get("specs") or {}
-    spec_list = [{"fkey": k, "fvalue": v} for k, v in specs.items()]
-    if not spec_list and rec.get("features"):
-        spec_list = [{"fkey": "Highlight", "fvalue": f} for f in rec["features"]]
 
-    price = rec.get("price")
-    if isinstance(price, (int, float)):
-        mrp = f"₹{price:,.0f}"
-    else:
-        mrp = rec.get("product_mrp") or ""
-
+def _fallback_details(product_id: Any) -> Dict[str, Any]:
+    # Never substitute dummy catalog data for a real product, even on matching IDs.
+    from tools.product_search_tool import product_search_instance
+    record = product_search_instance.get_product_record(product_id)
+    if not record:
+        return {}
     return {
         "product_id": str(product_id),
-        "product_name": rec.get("product_name"),
-        "product_mrp": mrp,
-        "product_image": rec.get("image", ""),
-        "instock": "Yes",
-        "product_specification": spec_list,
-        "meta_desc": "",
-        "del": {},
-        "source": "catalog",
+        "product_name": record["product_name"],
+        "product_mrp": record["price"],
+        "product_image": record.get("image_url", ""),
+        "product_url": record["product_url"],
+        "product_specification": [
+            {"fkey": "Highlight", "fvalue": feature} for feature in record.get("features", [])
+        ],
+        "source": "sql_snapshot",
+        **pricing_fields(record),
+        **availability_fields(),
     }
-
 
 
 @tool("get_filtered_product_details", args_schema=ProductDetailInput, return_direct=False)
 def get_filtered_product_details_tool(product_id: int, city: str = "INDORE") -> Dict[str, Any]:
+    """Get product details and city-specific live stock. Unknown stock is NOT out of stock.
+
+    An index fallback provides specifications/prices only, never verified availability.
     """
-    Get selected product details from Lotus Electronics using the product_id and city name the city name is Optional.
-
-    Returns only the following fields:
-    - product_id
-    - product_name
-    - uri_slug
-    - product_sku
-    - product_mrp
-    - product_image (first image only)
-    - instock
-    - product_features
-    - meta_desc
-    - del (std, t3h, stp)
-    """
-    url = "https://portal.lotuselectronics.com/web-api/home/product_detail"
-
-    headers = {
-        "auth-key": "Web2@!9",
-        "auth-token": LOTUS_AUTH_TOKEN,
-        "end-client": "Lotus-Web",
-    }
-
-    data = {
-        "product_id": str(product_id),
-        "city": city
-    }
-
-    try:
-        response = requests.post(url, headers=headers, data=data)
-        response.raise_for_status()
-
-        payload = response.json()
-        # On an expired/invalid token or missing product the API returns
-        # {"data": "", "error": "1", ...} — data is a string, not a dict.
-        data_field = payload.get("data")
-        product_detail = data_field.get("product_detail", {}) if isinstance(data_field, dict) else {}
-        if not product_detail:
-            # Live API had nothing — fall back to what we already know locally
-            fallback = _fallback_details(product_id)
-            return fallback if fallback else {"error": "Product not found."}
-
-        return {
-            "product_id": product_detail.get("product_id"),
-            "product_name": product_detail.get("product_name"),
-            "uri_slug": product_detail.get("uri_slug"),
-            "product_sku": product_detail.get("product_sku"),
-            "product_mrp": product_detail.get("product_mrp"),
-            "product_image": product_detail.get("product_image", [None])[0],
-            "instock": product_detail.get("instock"),
-            "product_specification": product_detail.get("product_specification"),
-            "meta_desc": product_detail.get("meta_desc"),
-            "del": product_detail.get("del"),
-        }
-
-    except requests.RequestException:
-        fallback = _fallback_details(product_id)
-        return fallback if fallback else {"error": "Product details are temporarily unavailable."}
-    except ValueError:
-        fallback = _fallback_details(product_id)
-        return fallback if fallback else {"error": "Failed to parse product details."}
-
-# Example usage (commented out to prevent execution on import)
-# response = get_filtered_product_details_tool.invoke({
-#     "product_id": 36356
-# })
-# print(response)
-
+    detail = fetch_live_details(product_id, city)
+    if not detail.get("error"):
+        return detail
+    fallback = _fallback_details(product_id)
+    if fallback:
+        fallback.update(availability_fields(city=city))
+        fallback["availability_message"] = detail["error"]
+        from live_product_enrichment import enabled, PRICE_FIELDS
+        if enabled():
+            for key in PRICE_FIELDS:
+                fallback.pop(key, None)
+            fallback.update(product_mrp="Price unavailable", price_verified=False,
+                            price_source="unverified")
+        return fallback
+    return detail

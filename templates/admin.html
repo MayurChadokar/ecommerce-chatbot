@@ -58,6 +58,7 @@
             <button class="tab active" data-tab="sessions"><i class="fas fa-comments"></i> Sessions &amp; Chats</button>
             <button class="tab" data-tab="orders"><i class="fas fa-box"></i> Orders</button>
             <button class="tab" data-tab="tickets"><i class="fas fa-headset"></i> Tickets</button>
+            <button class="tab" data-tab="bulk"><i class="fas fa-building"></i> Bulk enquiries</button>
         </div>
 
         <!-- Sessions view -->
@@ -104,9 +105,20 @@
                 </div>
             </div>
         </section>
+        <section id="tab-bulk" style="display:none">
+            <div class="card">
+                <div class="card-head"><i class="fas fa-building"></i> Bulk enquiries awaiting quotation review</div>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Reference</th><th>Requirement</th><th>Quantity</th><th>Contact</th><th>Delivery</th><th>Status</th><th>Received</th></tr></thead>
+                        <tbody id="bulkBody"><tr><td colspan="7" class="muted">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
     </main>
 
-    <script src="/static/js/admin.js"></script>
+    <script src="/static/js/admin.js?v=20260930-bulk-details-4"></script>
 {% endif %}
 </body>
 

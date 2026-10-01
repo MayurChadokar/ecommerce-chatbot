@@ -1,0 +1,1000 @@
+{
+  "namespace": "lotus-products-sql-20260928",
+  "version": "823dce647fb8aac5a13af66960160ec40d669cdad3a2eebd7a9008fca9c770b3",
+  "brands": [
+    "Acer",
+    "Amazfit",
+    "Amazon",
+    "Ambrane",
+    "Apple",
+    "Asus",
+    "Bajaj",
+    "Balzano",
+    "Beetel",
+    "Belkin",
+    "Benq",
+    "Bergner",
+    "Black & Decker",
+    "Blowhot",
+    "Blue Star",
+    "Boat",
+    "Borosil",
+    "Bosch",
+    "Bose",
+    "Canon",
+    "Carrier",
+    "Clearline",
+    "Crompton",
+    "Daikin",
+    "Dell",
+    "Denon",
+    "DigiTek",
+    "Dyson",
+    "Elanpro",
+    "Elica",
+    "Eureka Forbes",
+    "Faber",
+    "Fastrack",
+    "Fire Boltt",
+    "Fujifilm Instax",
+    "GOOGLE",
+    "Glen",
+    "Godrej",
+    "HP",
+    "Haier",
+    "Hamilton Beach",
+    "Havells",
+    "Hawkins",
+    "Hi-Luxe",
+    "Hitachi",
+    "IFB",
+    "JBL",
+    "Jaquar",
+    "Kart",
+    "Kelvinator",
+    "Kenstar",
+    "Kent",
+    "LG",
+    "LOTUS Care Plus",
+    "Lenovo",
+    "Liebherr",
+    "Lifelong",
+    "Lloyd",
+    "Logitech",
+    "Marantz",
+    "Marshall",
+    "McCoy",
+    "Milcent",
+    "Mitsubishi",
+    "Morphy Richards",
+    "Motorola",
+    "Natraj",
+    "Nayasa",
+    "Nikon",
+    "Noise",
+    "Nokia",
+    "Nova",
+    "Nutribullet",
+    "O General",
+    "OnePlus",
+    "Oppo",
+    "Orient",
+    "Panasonic",
+    "Pebble",
+    "Philips",
+    "Pigeon",
+    "Portronics",
+    "Realme",
+    "Redmi",
+    "Samsung",
+    "Sandisk",
+    "Sansui",
+    "Saregama",
+    "Siemens",
+    "Sony",
+    "Sujata",
+    "Sunflame",
+    "Symphony",
+    "TCL",
+    "TP Link",
+    "Tefal",
+    "Timex",
+    "Usha",
+    "V-Guard",
+    "Vega",
+    "Viewsonic",
+    "Vinod",
+    "Vivo",
+    "Voltas",
+    "Voltas Beko",
+    "WD",
+    "Wahl",
+    "Westinghouse",
+    "Whirlpool",
+    "Whitegold",
+    "Wonderchef",
+    "Yale",
+    "Yamaha",
+    "Zebronics"
+  ],
+  "categories": [
+    "4K Ultra HD TV",
+    "AIO Desktop",
+    "Air Fryer",
+    "Air Purifier",
+    "Amplified Speaker",
+    "Android Smartphone",
+    "Atta Makers",
+    "Beard Trimmer",
+    "Beverage Makers",
+    "Bluetooth Speaker",
+    "Body Groomer",
+    "Bottom Freezer Refrigerator",
+    "Built In Microwave",
+    "Built In Refrigerator",
+    "Built in Hob",
+    "Built in Oven",
+    "Cameras",
+    "Cassette AC",
+    "Ceiling Fan",
+    "Chimneys",
+    "Chopper",
+    "Cloth Dryer",
+    "Coffee and Tea Makers",
+    "Colour Laser Printer",
+    "Computer Accessories",
+    "Convection Microwave Oven",
+    "Convertible Laptop",
+    "Cooking Appliances",
+    "Cordless Phones",
+    "Deep Freezer",
+    "Digital DSLR Camera",
+    "Dishwasher",
+    "Double Door Refrigerator",
+    "Dry Irons",
+    "Earphone",
+    "Electric Kettle",
+    "Exhaust Fan",
+    "Fans",
+    "Feature Mobile Phone",
+    "Floor & Home Care",
+    "Food Processor",
+    "French Door Refrigerator",
+    "Front Load Washing Machine",
+    "Full HD LED TV",
+    "Gaming",
+    "Gaming Console",
+    "Gaming Laptop",
+    "Gaming Software",
+    "Garment Steamer",
+    "Gas Stove",
+    "Grill Microwave",
+    "HD LED TV",
+    "Hair Brush",
+    "Hair Curler",
+    "Hair Dryer",
+    "Hair Grooming",
+    "Hair Multi Styler",
+    "Hair Straightener",
+    "Hair Styler",
+    "Hand Blender",
+    "Hand Mixer",
+    "Headphones",
+    "Hob",
+    "Home Theatre",
+    "Induction Cooker",
+    "InkJet Printer",
+    "Juicer",
+    "Keyboard",
+    "Kitchen Appliances",
+    "Laptops",
+    "Laser Printer",
+    "Locker Biometric",
+    "Locker Digital",
+    "Locker Key Lock",
+    "MacBook Laptop",
+    "Mini Refrigerator",
+    "Mixer Grinder",
+    "Mobile Accessories",
+    "Mouse",
+    "Multi Groomer",
+    "Neckband",
+    "OLED TV",
+    "Oven Toaster & Griller",
+    "Pedestal Fan",
+    "Pendrives",
+    "Pop Up Toaster",
+    "Power",
+    "Projectors",
+    "QLED TV",
+    "Rice Cooker",
+    "Room Coolers",
+    "Room Heaters",
+    "Sandwich maker",
+    "Semi Automatic Washing Machine",
+    "Sewing Machines",
+    "Side By Side Refrigerator",
+    "Single Door Refrigerator",
+    "Smart Speaker",
+    "Smart Watch",
+    "Solo Microwave Oven",
+    "Sound Bar",
+    "Steam Irons",
+    "Tablets & I Pads",
+    "Telephones",
+    "Thin & Light Laptop",
+    "Top Load Washing Machine",
+    "Tower AC",
+    "Tower Desktop",
+    "Tower Fan",
+    "Tower Speaker",
+    "Triple Door Refrigerator",
+    "Vacuum Cleaner",
+    "Vegetable & Fruit Purifier",
+    "Wall Fan",
+    "Wall Mounted Split AC",
+    "Water Cooler",
+    "Water Dispenser",
+    "Water Heaters",
+    "Water Purifier RO",
+    "Water Purifier UV",
+    "Window AC",
+    "Windows Laptop",
+    "Wireless Headphone",
+    "iPhone Mobile"
+  ],
+  "brandCategories": {
+    "Acer": [
+      "Tablets & I Pads"
+    ],
+    "Amazfit": [
+      "Smart Watch"
+    ],
+    "Amazon": [
+      "Bluetooth Speaker"
+    ],
+    "Ambrane": [
+      "Mobile Accessories",
+      "Power"
+    ],
+    "Apple": [
+      "AIO Desktop",
+      "Computer Accessories",
+      "HD LED TV",
+      "Headphones",
+      "Keyboard",
+      "MacBook Laptop",
+      "Mobile Accessories",
+      "Smart Watch",
+      "Tablets & I Pads",
+      "Tower Desktop",
+      "iPhone Mobile"
+    ],
+    "Asus": [
+      "AIO Desktop",
+      "Convertible Laptop",
+      "Gaming Laptop",
+      "Laptops",
+      "Thin & Light Laptop",
+      "Windows Laptop"
+    ],
+    "Bajaj": [
+      "Ceiling Fan",
+      "Dry Irons",
+      "Electric Kettle",
+      "Exhaust Fan",
+      "Food Processor",
+      "Hand Blender",
+      "Induction Cooker",
+      "Kitchen Appliances",
+      "Mixer Grinder",
+      "Pedestal Fan",
+      "Room Coolers",
+      "Room Heaters",
+      "Sandwich maker",
+      "Steam Irons",
+      "Tower Fan",
+      "Wall Fan",
+      "Water Heaters"
+    ],
+    "Balzano": [
+      "Juicer"
+    ],
+    "Beetel": [
+      "Cordless Phones"
+    ],
+    "Belkin": [
+      "Earphone",
+      "Mobile Accessories",
+      "Power"
+    ],
+    "Benq": [
+      "Projectors"
+    ],
+    "Bergner": [
+      "Cooking Appliances"
+    ],
+    "Black & Decker": [
+      "Sandwich maker"
+    ],
+    "Blowhot": [
+      "Chimneys",
+      "Gas Stove",
+      "Induction Cooker"
+    ],
+    "Blue Star": [
+      "Deep Freezer",
+      "Mini Refrigerator",
+      "Room Coolers",
+      "Wall Mounted Split AC",
+      "Water Cooler",
+      "Water Dispenser"
+    ],
+    "Boat": [
+      "Amplified Speaker",
+      "Bluetooth Speaker",
+      "Earphone",
+      "Headphones",
+      "Neckband",
+      "Power",
+      "Smart Watch",
+      "Sound Bar",
+      "Wireless Headphone"
+    ],
+    "Borosil": [],
+    "Bosch": [
+      "Air Fryer",
+      "Bottom Freezer Refrigerator",
+      "Built In Microwave",
+      "Built in Oven",
+      "Chimneys",
+      "Dishwasher",
+      "Double Door Refrigerator",
+      "Food Processor",
+      "Hand Blender",
+      "Hob",
+      "Induction Cooker",
+      "Juicer",
+      "Mixer Grinder",
+      "Single Door Refrigerator",
+      "Top Load Washing Machine"
+    ],
+    "Bose": [
+      "Bluetooth Speaker",
+      "Headphones",
+      "Home Theatre",
+      "Smart Speaker",
+      "Sound Bar"
+    ],
+    "Canon": [
+      "Cameras"
+    ],
+    "Carrier": [
+      "Wall Mounted Split AC"
+    ],
+    "Clearline": [
+      "Kitchen Appliances"
+    ],
+    "Crompton": [
+      "Ceiling Fan",
+      "Pedestal Fan",
+      "Water Heaters"
+    ],
+    "Daikin": [
+      "Cassette AC",
+      "Wall Mounted Split AC"
+    ],
+    "Dell": [
+      "AIO Desktop",
+      "Convertible Laptop",
+      "Gaming Laptop",
+      "Thin & Light Laptop",
+      "Windows Laptop"
+    ],
+    "Denon": [],
+    "DigiTek": [],
+    "Dyson": [
+      "Air Purifier",
+      "Hair Dryer",
+      "Hair Multi Styler",
+      "Hair Straightener",
+      "Hair Styler",
+      "Headphones",
+      "Vacuum Cleaner"
+    ],
+    "Elanpro": [
+      "Deep Freezer",
+      "Mini Refrigerator"
+    ],
+    "Elica": [
+      "Built In Microwave",
+      "Built in Oven",
+      "Chimneys",
+      "Dishwasher",
+      "Gas Stove",
+      "Hob"
+    ],
+    "Eureka Forbes": [
+      "Air Purifier",
+      "Vacuum Cleaner",
+      "Water Purifier RO",
+      "Water Purifier UV"
+    ],
+    "Faber": [
+      "Air Fryer",
+      "Built In Microwave",
+      "Built in Oven",
+      "Chimneys",
+      "Chopper",
+      "Deep Freezer",
+      "Dishwasher",
+      "Electric Kettle",
+      "Gas Stove",
+      "Hob",
+      "Oven Toaster & Griller",
+      "Sandwich maker"
+    ],
+    "Fastrack": [
+      "Smart Watch"
+    ],
+    "Fire Boltt": [
+      "Smart Watch"
+    ],
+    "Fujifilm Instax": [
+      "Digital DSLR Camera"
+    ],
+    "GOOGLE": [
+      "Android Smartphone",
+      "Mobile Accessories"
+    ],
+    "Glen": [
+      "Built in Hob",
+      "Chimneys",
+      "Gas Stove",
+      "Hob"
+    ],
+    "Godrej": [
+      "Double Door Refrigerator",
+      "Locker Biometric",
+      "Locker Digital",
+      "Locker Key Lock",
+      "Semi Automatic Washing Machine",
+      "Side By Side Refrigerator",
+      "Single Door Refrigerator",
+      "Top Load Washing Machine",
+      "Wall Mounted Split AC"
+    ],
+    "HP": [
+      "AIO Desktop",
+      "Colour Laser Printer",
+      "Convertible Laptop",
+      "Gaming Laptop",
+      "InkJet Printer",
+      "Laser Printer",
+      "Mouse",
+      "Pendrives",
+      "Thin & Light Laptop",
+      "Tower Desktop",
+      "Windows Laptop"
+    ],
+    "Haier": [
+      "4K Ultra HD TV",
+      "Bottom Freezer Refrigerator",
+      "Built In Microwave",
+      "Built in Oven",
+      "Chimneys",
+      "Convection Microwave Oven",
+      "Deep Freezer",
+      "Double Door Refrigerator",
+      "French Door Refrigerator",
+      "Full HD LED TV",
+      "HD LED TV",
+      "Hob",
+      "Mini Refrigerator",
+      "QLED TV",
+      "Semi Automatic Washing Machine",
+      "Side By Side Refrigerator",
+      "Single Door Refrigerator",
+      "Solo Microwave Oven",
+      "Top Load Washing Machine",
+      "Vacuum Cleaner",
+      "Wall Mounted Split AC",
+      "Water Dispenser",
+      "Water Heaters"
+    ],
+    "Hamilton Beach": [
+      "Kitchen Appliances",
+      "Pop Up Toaster"
+    ],
+    "Havells": [
+      "Air Fryer",
+      "Atta Makers",
+      "Beard Trimmer",
+      "Ceiling Fan",
+      "Chimneys",
+      "Electric Kettle",
+      "Exhaust Fan",
+      "Food Processor",
+      "Garment Steamer",
+      "Gas Stove",
+      "Hair Dryer",
+      "Hair Grooming",
+      "Hair Multi Styler",
+      "Hair Straightener",
+      "Hand Blender",
+      "Hand Mixer",
+      "Induction Cooker",
+      "Juicer",
+      "Kitchen Appliances",
+      "Mixer Grinder",
+      "Oven Toaster & Griller",
+      "Pedestal Fan",
+      "Pop Up Toaster",
+      "Room Coolers",
+      "Room Heaters",
+      "Sandwich maker",
+      "Steam Irons",
+      "Wall Fan",
+      "Water Heaters",
+      "Water Purifier RO",
+      "Water Purifier UV"
+    ],
+    "Hawkins": [
+      "Induction Cooker"
+    ],
+    "Hi-Luxe": [],
+    "Hitachi": [
+      "Cassette AC",
+      "Wall Mounted Split AC",
+      "Window AC"
+    ],
+    "IFB": [
+      "Cloth Dryer",
+      "Convection Microwave Oven",
+      "Dishwasher",
+      "Double Door Refrigerator",
+      "Front Load Washing Machine",
+      "Single Door Refrigerator",
+      "Solo Microwave Oven",
+      "Top Load Washing Machine"
+    ],
+    "JBL": [
+      "Amplified Speaker",
+      "Bluetooth Speaker",
+      "Earphone",
+      "Headphones",
+      "Home Theatre",
+      "Sound Bar"
+    ],
+    "Jaquar": [
+      "Water Heaters"
+    ],
+    "Kart": [],
+    "Kelvinator": [
+      "Wall Mounted Split AC"
+    ],
+    "Kenstar": [
+      "Air Fryer",
+      "Cooking Appliances",
+      "Dry Irons",
+      "Electric Kettle",
+      "Garment Steamer",
+      "Induction Cooker",
+      "Juicer",
+      "Mixer Grinder",
+      "Oven Toaster & Griller",
+      "Pop Up Toaster",
+      "Room Coolers",
+      "Sandwich maker",
+      "Steam Irons",
+      "Water Heaters"
+    ],
+    "Kent": [
+      "Air Fryer",
+      "Vacuum Cleaner",
+      "Vegetable & Fruit Purifier",
+      "Water Purifier RO"
+    ],
+    "LG": [
+      "4K Ultra HD TV",
+      "Bottom Freezer Refrigerator",
+      "Convection Microwave Oven",
+      "Dishwasher",
+      "Double Door Refrigerator",
+      "French Door Refrigerator",
+      "Front Load Washing Machine",
+      "Full HD LED TV",
+      "Grill Microwave",
+      "HD LED TV",
+      "OLED TV",
+      "Semi Automatic Washing Machine",
+      "Side By Side Refrigerator",
+      "Single Door Refrigerator",
+      "Solo Microwave Oven",
+      "Top Load Washing Machine",
+      "Wall Mounted Split AC",
+      "Water Purifier RO",
+      "Water Purifier UV"
+    ],
+    "LOTUS Care Plus": [],
+    "Lenovo": [
+      "AIO Desktop",
+      "Convertible Laptop",
+      "Gaming Laptop",
+      "Mouse",
+      "Tablets & I Pads",
+      "Thin & Light Laptop",
+      "Windows Laptop"
+    ],
+    "Liebherr": [
+      "Built In Refrigerator"
+    ],
+    "Lifelong": [
+      "Floor & Home Care",
+      "Garment Steamer",
+      "Induction Cooker",
+      "Projectors"
+    ],
+    "Lloyd": [
+      "Full HD LED TV",
+      "HD LED TV",
+      "Mini Refrigerator",
+      "QLED TV",
+      "Semi Automatic Washing Machine",
+      "Top Load Washing Machine",
+      "Wall Mounted Split AC",
+      "Window AC"
+    ],
+    "Logitech": [
+      "Gaming",
+      "Keyboard",
+      "Mouse"
+    ],
+    "Marantz": [
+      "Home Theatre"
+    ],
+    "Marshall": [
+      "Amplified Speaker",
+      "Bluetooth Speaker",
+      "Earphone",
+      "Headphones",
+      "Smart Speaker",
+      "Wireless Headphone"
+    ],
+    "McCoy": [
+      "Electric Kettle",
+      "Mixer Grinder",
+      "Semi Automatic Washing Machine"
+    ],
+    "Milcent": [
+      "Atta Makers"
+    ],
+    "Mitsubishi": [
+      "Wall Mounted Split AC"
+    ],
+    "Morphy Richards": [
+      "Air Fryer",
+      "Coffee and Tea Makers",
+      "Food Processor",
+      "Garment Steamer",
+      "Hand Blender",
+      "Induction Cooker",
+      "Juicer",
+      "Mixer Grinder",
+      "Oven Toaster & Griller",
+      "Pop Up Toaster",
+      "Room Heaters",
+      "Steam Irons"
+    ],
+    "Motorola": [
+      "Android Smartphone"
+    ],
+    "Natraj": [
+      "Atta Makers"
+    ],
+    "Nayasa": [],
+    "Nikon": [
+      "Cameras",
+      "Digital DSLR Camera"
+    ],
+    "Noise": [
+      "Headphones",
+      "Neckband",
+      "Smart Watch",
+      "Wireless Headphone"
+    ],
+    "Nokia": [
+      "Feature Mobile Phone"
+    ],
+    "Nova": [
+      "Beard Trimmer",
+      "Hair Dryer",
+      "Hair Multi Styler",
+      "Hair Straightener"
+    ],
+    "Nutribullet": [
+      "Hand Blender"
+    ],
+    "O General": [
+      "Wall Mounted Split AC"
+    ],
+    "OnePlus": [
+      "Headphones",
+      "Mobile Accessories",
+      "Neckband"
+    ],
+    "Oppo": [
+      "Android Smartphone",
+      "Smart Watch"
+    ],
+    "Orient": [
+      "Ceiling Fan",
+      "Exhaust Fan",
+      "Induction Cooker",
+      "Mixer Grinder",
+      "Pedestal Fan",
+      "Room Coolers",
+      "Room Heaters",
+      "Wall Fan",
+      "Water Heaters"
+    ],
+    "Panasonic": [
+      "4K Ultra HD TV",
+      "Cordless Phones",
+      "Full HD LED TV",
+      "HD LED TV",
+      "Telephones",
+      "Wall Mounted Split AC"
+    ],
+    "Pebble": [
+      "Smart Watch"
+    ],
+    "Philips": [
+      "Air Fryer",
+      "Air Purifier",
+      "Amplified Speaker",
+      "Beard Trimmer",
+      "Bluetooth Speaker",
+      "Body Groomer",
+      "Coffee and Tea Makers",
+      "Dry Irons",
+      "Earphone",
+      "Electric Kettle",
+      "Garment Steamer",
+      "Hair Brush",
+      "Hair Dryer",
+      "Hair Grooming",
+      "Hair Multi Styler",
+      "Hair Straightener",
+      "Hand Blender",
+      "Hand Mixer",
+      "Juicer",
+      "Kitchen Appliances",
+      "Mixer Grinder",
+      "Multi Groomer",
+      "Pop Up Toaster",
+      "Smart Speaker",
+      "Sound Bar",
+      "Steam Irons",
+      "Tower Speaker"
+    ],
+    "Pigeon": [
+      "Induction Cooker"
+    ],
+    "Portronics": [
+      "Computer Accessories",
+      "Earphone",
+      "Fans",
+      "Headphones",
+      "Mobile Accessories",
+      "Mouse",
+      "Power",
+      "Projectors",
+      "Vacuum Cleaner",
+      "Wireless Headphone"
+    ],
+    "Realme": [
+      "Android Smartphone",
+      "Headphones",
+      "Mobile Accessories",
+      "Neckband"
+    ],
+    "Redmi": [
+      "Android Smartphone"
+    ],
+    "Samsung": [
+      "4K Ultra HD TV",
+      "Amplified Speaker",
+      "Android Smartphone",
+      "Bottom Freezer Refrigerator",
+      "Convection Microwave Oven",
+      "Double Door Refrigerator",
+      "French Door Refrigerator",
+      "Front Load Washing Machine",
+      "Full HD LED TV",
+      "HD LED TV",
+      "Headphones",
+      "Mobile Accessories",
+      "OLED TV",
+      "QLED TV",
+      "Semi Automatic Washing Machine",
+      "Side By Side Refrigerator",
+      "Single Door Refrigerator",
+      "Smart Watch",
+      "Sound Bar",
+      "Tablets & I Pads",
+      "Top Load Washing Machine"
+    ],
+    "Sandisk": [
+      "Computer Accessories",
+      "Mobile Accessories",
+      "Pendrives"
+    ],
+    "Sansui": [
+      "4K Ultra HD TV",
+      "Full HD LED TV",
+      "HD LED TV",
+      "QLED TV",
+      "Wall Mounted Split AC"
+    ],
+    "Saregama": [
+      "Bluetooth Speaker"
+    ],
+    "Siemens": [
+      "Chimneys"
+    ],
+    "Sony": [
+      "4K Ultra HD TV",
+      "Amplified Speaker",
+      "Bluetooth Speaker",
+      "Cameras",
+      "Digital DSLR Camera",
+      "Earphone",
+      "Gaming",
+      "Gaming Console",
+      "Gaming Software",
+      "HD LED TV",
+      "Headphones",
+      "Neckband",
+      "OLED TV",
+      "Smart Speaker",
+      "Sound Bar",
+      "Wireless Headphone"
+    ],
+    "Sujata": [
+      "Dry Irons",
+      "Gas Stove",
+      "Hand Blender",
+      "Hob",
+      "Juicer",
+      "Kitchen Appliances",
+      "Mixer Grinder"
+    ],
+    "Sunflame": [
+      "Chimneys",
+      "Cooking Appliances",
+      "Electric Kettle",
+      "Gas Stove",
+      "Hob",
+      "Induction Cooker"
+    ],
+    "Symphony": [
+      "Room Coolers",
+      "Tower Fan"
+    ],
+    "TCL": [
+      "4K Ultra HD TV",
+      "QLED TV",
+      "Wall Mounted Split AC"
+    ],
+    "TP Link": [
+      "Computer Accessories"
+    ],
+    "Tefal": [
+      "Garment Steamer",
+      "Vacuum Cleaner"
+    ],
+    "Timex": [
+      "Smart Watch"
+    ],
+    "Usha": [
+      "Air Fryer",
+      "Ceiling Fan",
+      "Dry Irons",
+      "Electric Kettle",
+      "Food Processor",
+      "Garment Steamer",
+      "Gas Stove",
+      "Hand Blender",
+      "Induction Cooker",
+      "Juicer",
+      "Kitchen Appliances",
+      "Mixer Grinder",
+      "Oven Toaster & Griller",
+      "Pedestal Fan",
+      "Pop Up Toaster",
+      "Room Coolers",
+      "Room Heaters",
+      "Sandwich maker",
+      "Sewing Machines",
+      "Steam Irons",
+      "Water Dispenser",
+      "Water Heaters"
+    ],
+    "V-Guard": [],
+    "Vega": [
+      "Beard Trimmer",
+      "Hair Brush",
+      "Hair Curler",
+      "Hair Dryer",
+      "Hair Multi Styler",
+      "Hair Straightener",
+      "Hair Styler",
+      "Multi Groomer"
+    ],
+    "Viewsonic": [
+      "Projectors"
+    ],
+    "Vinod": [],
+    "Vivo": [
+      "Android Smartphone"
+    ],
+    "Voltas": [
+      "Deep Freezer",
+      "Tower AC",
+      "Wall Mounted Split AC",
+      "Water Cooler",
+      "Water Dispenser"
+    ],
+    "Voltas Beko": [
+      "Convection Microwave Oven",
+      "Front Load Washing Machine",
+      "Semi Automatic Washing Machine",
+      "Solo Microwave Oven"
+    ],
+    "WD": [
+      "Computer Accessories"
+    ],
+    "Wahl": [
+      "Multi Groomer"
+    ],
+    "Westinghouse": [
+      "Dry Irons",
+      "Mixer Grinder"
+    ],
+    "Whirlpool": [
+      "Bottom Freezer Refrigerator",
+      "Double Door Refrigerator",
+      "Semi Automatic Washing Machine",
+      "Single Door Refrigerator",
+      "Top Load Washing Machine",
+      "Triple Door Refrigerator"
+    ],
+    "Whitegold": [],
+    "Wonderchef": [
+      "Air Fryer",
+      "Beverage Makers",
+      "Coffee and Tea Makers",
+      "Cooking Appliances",
+      "Hand Blender",
+      "Induction Cooker",
+      "Juicer",
+      "Mixer Grinder",
+      "Oven Toaster & Griller",
+      "Rice Cooker"
+    ],
+    "Yale": [
+      "Locker Biometric",
+      "Locker Digital"
+    ],
+    "Yamaha": [
+      "Bluetooth Speaker"
+    ],
+    "Zebronics": [
+      "Amplified Speaker",
+      "Bluetooth Speaker",
+      "Smart Speaker",
+      "Sound Bar"
+    ]
+  }
+}

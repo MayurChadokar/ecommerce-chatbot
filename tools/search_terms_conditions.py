@@ -10,15 +10,16 @@ from typing import Dict, List, Any
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-try:
-    from pinecone import Pinecone
-    from sentence_transformers import SentenceTransformer
-    from textblob import TextBlob
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    DEPENDENCIES_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Missing dependencies for T&C search: {e}")
-    DEPENDENCIES_AVAILABLE = False
+DEPENDENCIES_AVAILABLE = False
+if os.getenv("ENABLE_POLICY_VECTOR_SEARCH", "false").lower() == "true":
+    try:
+        from pinecone import Pinecone
+        from sentence_transformers import SentenceTransformer
+        from textblob import TextBlob
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        DEPENDENCIES_AVAILABLE = True
+    except ImportError as e:
+        print(f"⚠️ Missing dependencies for T&C search: {e}")
 
 class TermsConditionsInput(BaseModel):
     """Input schema for Terms & Conditions search."""

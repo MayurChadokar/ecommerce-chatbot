@@ -1,4 +1,7 @@
 .env
+# Product exports and vectors are local/private build artifacts.
+/data/product-index/
+/artifacts/product-index/
 lotus_app.db
 tools/__pycache__/product_search_tool.cpython-310.pyc
 __pycache__/chat.cpython-310.pyc
@@ -20,3 +23,20 @@ __pycache__/
 .history/.gitignore_20250902121504
 .history/.gitignore_20250902121503
 .history/.gitignore_20250902121509
+
+# Local Python environments and test caches.
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local logs, generated reports, and validation artifacts.
+/logs/
+/artifacts/
+/output/
+/tmp????????/
+
+# Editor/OS leftovers and local backups.
+*.backup
+.DS_Store

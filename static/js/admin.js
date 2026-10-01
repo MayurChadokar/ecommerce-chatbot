@@ -109,7 +109,7 @@
     }
 
     function initTabs() {
-        const panels = ["sessions", "orders", "tickets"];
+        const panels = ["sessions", "orders", "tickets", "bulk"];
         document.querySelectorAll(".tab").forEach(tab => {
             tab.addEventListener("click", () => {
                 document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -144,11 +144,31 @@
         } catch (e) { console.error(e); }
     }
 
+    async function loadBulkEnquiries() {
+        try {
+            const enquiries = await getJSON('/admin/api/bulk-enquiries');
+            if (!enquiries) return;
+            const body = $('bulkBody');
+            body.innerHTML = enquiries.map(e => `<tr>
+                <td class="order-id">${esc(e.enquiry_id)}</td>
+                <td>${esc(e.product_requirement)}<br><small>${esc(e.purpose)}</small><br><small>Budget/unit: ${esc(e.budget_per_unit ?? 'Not specified')}</small></td>
+                <td>${esc(e.quantity)}</td>
+                <td>${esc(e.contact_name)}<br>${esc(e.phone)}<br>${esc(e.company_name || '')}<br>${esc(e.email || '')}<br><small>GST: ${esc(e.gst_requirement || 'Not specified')}</small></td>
+                <td>${esc(e.city)} ${esc(e.pincode || '')}<br><small>Requested: ${esc(e.required_by || 'Not specified')}</small></td>
+                <td><span class="badge processing">${esc(e.status)}</span></td>
+                <td>${fmtTime(e.created_at)}</td>
+            </tr>`).join('') || '<tr><td colspan="7" class="muted center">No bulk enquiries yet.</td></tr>';
+        } catch (e) {
+            $('bulkBody').textContent = 'Unable to load bulk enquiries. Please refresh.';
+        }
+    }
+
     function refreshAll() {
         loadStats();
         loadSessions();
         loadOrders();
         loadTickets();
+        loadBulkEnquiries();
     }
 
     document.addEventListener("DOMContentLoaded", () => {

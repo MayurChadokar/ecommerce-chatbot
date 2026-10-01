@@ -14,6 +14,9 @@ persistence never breaks the chat.
 import os
 import json
 import random
+import hashlib
+import uuid
+from contextlib import closing
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -30,7 +33,7 @@ def _connect() -> sqlite3.Connection:
 def init_db() -> None:
     """Create tables if they don't exist. Safe to call repeatedly."""
     try:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -49,6 +52,10 @@ def init_db() -> None:
                 );
                 CREATE INDEX IF NOT EXISTS idx_chat_logs_session
                     ON chat_logs(session_id);
+                CREATE TABLE IF NOT EXISTS chat_responses (
+                    message_id INTEGER PRIMARY KEY,
+                    response_json TEXT NOT NULL
+                );
 
                 CREATE TABLE IF NOT EXISTS orders (
                     order_id          TEXT PRIMARY KEY,
@@ -71,6 +78,22 @@ def init_db() -> None:
                     status      TEXT,
                     created_at  TEXT
                 );
+
+                CREATE TABLE IF NOT EXISTS bulk_enquiries (
+                    enquiry_id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    fingerprint TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(session_id, fingerprint)
+                );
+                CREATE TABLE IF NOT EXISTS bulk_enquiry_drafts (
+                    session_id TEXT PRIMARY KEY,
+                    draft_id TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    shown_message_id INTEGER,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
     except Exception as e:  # pragma: no cover - defensive
@@ -80,18 +103,20 @@ def init_db() -> None:
 # --------------------------------------------------------------------------- #
 # Chat logging / sessions
 # --------------------------------------------------------------------------- #
-def log_message(session_id: str, role: str, message: str) -> None:
+def log_message(session_id: str, role: str, message: str, response_json: Optional[str] = None) -> Optional[int]:
     """Record one message and upsert its session row."""
     if not session_id or not message:
         return
     now = datetime.utcnow().isoformat()
     try:
         with _connect() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 "INSERT INTO chat_logs (session_id, role, message, created_at) "
                 "VALUES (?, ?, ?, ?)",
                 (session_id, role, message, now),
             )
+            if role == "assistant" and response_json:
+                conn.execute("INSERT INTO chat_responses VALUES (?, ?)", (cursor.lastrowid, response_json))
             conn.execute(
                 """
                 INSERT INTO sessions (session_id, created_at, last_active, message_count)
@@ -102,6 +127,7 @@ def log_message(session_id: str, role: str, message: str) -> None:
                 """,
                 (session_id, now, now),
             )
+        return cursor.lastrowid
     except Exception as e:  # pragma: no cover - defensive
         print(f"❌ store.log_message failed: {type(e).__name__}: {e}")
 
@@ -123,7 +149,7 @@ def get_chat_logs(session_id: str) -> List[Dict[str, Any]]:
     try:
         with _connect() as conn:
             rows = conn.execute(
-                "SELECT role, message, created_at FROM chat_logs "
+                "SELECT id, role, message, created_at FROM chat_logs "
                 "WHERE session_id = ? ORDER BY id ASC",
                 (session_id,),
             ).fetchall()
@@ -140,10 +166,85 @@ def get_stats() -> Dict[str, int]:
             messages = conn.execute("SELECT COUNT(*) FROM chat_logs").fetchone()[0]
             orders = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
             tickets = conn.execute("SELECT COUNT(*) FROM tickets").fetchone()[0]
-            return {"sessions": sessions, "messages": messages, "orders": orders, "tickets": tickets}
+            bulk = conn.execute("SELECT COUNT(*) FROM bulk_enquiries").fetchone()[0]
+            return {"sessions": sessions, "messages": messages, "orders": orders, "tickets": tickets, "bulk_enquiries": bulk}
     except Exception as e:  # pragma: no cover - defensive
         print(f"❌ store.get_stats failed: {type(e).__name__}: {e}")
-        return {"sessions": 0, "messages": 0, "orders": 0, "tickets": 0}
+        return {"sessions": 0, "messages": 0, "orders": 0, "tickets": 0, "bulk_enquiries": 0}
+
+
+def get_chat_context(session_id: str, limit: int = 40) -> List[Dict[str, Any]]:
+    """Canonical, ordered conversation including the product cards actually shown."""
+    with closing(_connect()) as conn:
+        rows = conn.execute(
+            "SELECT l.id,l.role,l.message,r.response_json FROM chat_logs l "
+            "LEFT JOIN chat_responses r ON r.message_id=l.id "
+            "WHERE l.session_id=? ORDER BY l.id DESC LIMIT ?", (session_id, limit)
+        ).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+
+def create_bulk_enquiry(session_id: str, details: Dict[str, Any]) -> Dict[str, Any]:
+    """Commit a quotation request; identical retries in a session reuse its ID."""
+    canonical = json.dumps(details, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    created = datetime.utcnow().isoformat()
+    record = {
+        **details,
+        "enquiry_id": "BULK-" + uuid.uuid4().hex[:12].upper(),
+        "status": "Quotation pending",
+        "created_at": created,
+        "purchase_confirmed": False,
+        "notice": "Enquiry saved. Bulk pricing, stock and delivery require confirmation. No purchase has been placed.",
+    }
+    try:
+        with closing(_connect()) as conn, conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO bulk_enquiries "
+                "(enquiry_id, session_id, fingerprint, payload_json, created_at) VALUES (?, ?, ?, ?, ?)",
+                (record["enquiry_id"], session_id, fingerprint, json.dumps(record, ensure_ascii=False), created),
+            )
+            row = conn.execute(
+                "SELECT payload_json FROM bulk_enquiries WHERE session_id = ? AND fingerprint = ?",
+                (session_id, fingerprint),
+            ).fetchone()
+            saved = json.loads(row["payload_json"])
+        return saved  # Only after transaction commit succeeds.
+    except Exception:
+        return {"error": "Your bulk enquiry could not be saved. No order was placed. Please try again.",
+                "error_code": "bulk_enquiry_save_failed"}
+
+
+def get_bulk_enquiries() -> List[Dict[str, Any]]:
+    with closing(_connect()) as conn:
+        rows = conn.execute("SELECT payload_json FROM bulk_enquiries ORDER BY created_at DESC").fetchall()
+        return [json.loads(row["payload_json"]) for row in rows]
+
+
+def save_bulk_draft(session_id: str, details: dict) -> dict:
+    draft = {"draft_id": "DRAFT-" + uuid.uuid4().hex, "details": details}
+    with closing(_connect()) as conn, conn:
+        conn.execute(
+            "INSERT INTO bulk_enquiry_drafts VALUES (?, ?, ?, NULL, ?) "
+            "ON CONFLICT(session_id) DO UPDATE SET draft_id=excluded.draft_id, "
+            "payload_json=excluded.payload_json, shown_message_id=NULL, created_at=excluded.created_at",
+            (session_id, draft["draft_id"], json.dumps(details, ensure_ascii=False), datetime.utcnow().isoformat()),
+        )
+    return draft
+
+
+def get_bulk_draft(session_id: str) -> dict:
+    with closing(_connect()) as conn:
+        row = conn.execute("SELECT * FROM bulk_enquiry_drafts WHERE session_id=?", (session_id,)).fetchone()
+        if not row:
+            return {}
+        return {**dict(row), "details": json.loads(row["payload_json"])}
+
+
+def mark_bulk_draft_shown(session_id: str, draft_id: str, message_id: int) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute("UPDATE bulk_enquiry_drafts SET shown_message_id=? WHERE session_id=? AND draft_id=?",
+                     (message_id, session_id, draft_id))
 
 
 # --------------------------------------------------------------------------- #
@@ -209,6 +310,8 @@ def create_order(session_id: Optional[str], product: Dict[str, Any]) -> Dict[str
             )
     except Exception as e:  # pragma: no cover - defensive
         print(f"❌ store.create_order failed: {type(e).__name__}: {e}")
+        return {"error": "The order could not be saved. Please try again.",
+                "error_code": "order_creation_failed"}
     out = dict(record)
     out["timeline"] = timeline
     out.pop("timeline_json", None)

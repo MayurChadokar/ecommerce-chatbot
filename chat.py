@@ -1,6 +1,7 @@
 import os
 import uuid
 import re
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,6 +11,7 @@ from collections import deque
 from datetime import datetime, timedelta
 import json
 import redis
+from chat_context import build_chat_context, message_text
 import pickle
 from langchain.chat_models import init_chat_model
 
@@ -35,6 +37,7 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     number_of_steps: int
     user_id: str
+    bulk_enquiry: dict
 
 class RedisMemory:
     """Redis-based memory for storing user conversations with TTL."""
@@ -53,7 +56,10 @@ class RedisMemory:
             host=redis_host, 
             port=redis_port, 
             db=redis_db, 
-            decode_responses=False
+            decode_responses=False,
+            protocol=2,
+            socket_connect_timeout=2,
+            socket_timeout=2,
         )
         self.ttl_seconds = ttl_seconds
         
@@ -212,6 +218,7 @@ from tools.recommend_products import recommend_products_tool
 from tools.browse_catalog import browse_catalog_tool
 from tools.order_tools import place_order_tool, track_order_tool, set_current_session
 from tools.ticket_tools import raise_ticket_tool
+from tools.bulk_order_tools import create_bulk_order_enquiry, prepare_bulk_order_enquiry, normalize_bulk_response
 
 # SQLite persistence for chat logs, sessions and orders
 import store
@@ -233,14 +240,21 @@ tools = [
     place_order_tool,
     track_order_tool,
     raise_ticket_tool,
+    create_bulk_order_enquiry,
+    prepare_bulk_order_enquiry,
 ]
 
 from datetime import datetime
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 
 # System prompt for Lotus Electronics chatbot
 SYSTEM_PROMPT = """You are Lotus Electronics Sales Assistant - helping customers find electronics products and store locations in India.
+Preserve all tool-provided pricing fields on product objects: mrp, selling_price,
+discount_amount, discount_percent and store_offer_price. product_mrp is the legacy
+ONLINE SELLING price, not list MRP; mrp is list MRP. Store offer prices are conditional
+in-store offers and must not replace the online selling price. Do not invent prices
+or omit the supplied pricing fields from products, recommendations or product_details.
 
 CRITICAL RESPONSE FORMAT REQUIREMENT:
 You MUST respond with EXACTLY this JSON structure - NO nested JSON strings, NO escaped quotes, NO additional wrapping:
@@ -255,6 +269,7 @@ You MUST respond with EXACTLY this JSON structure - NO nested JSON strings, NO e
   "recommendations": [array of product objects if recommend_products was used],
   "order": {order object if place_order or track_order was used},
   "ticket": {ticket object if raise_ticket was used},
+  "bulk_enquiry": {saved enquiry object if create_bulk_order_enquiry succeeded},
   "end": "follow-up question to continue conversation"
 }
 
@@ -284,16 +299,24 @@ TOOL USAGE RULES:
    ("recommend", "suggest", "what else", "alternatives", "something similar",
    "best phone under 20000"). Pass a category and/or budget, or based_on_product_id.
    Put the returned list in the "recommendations" field.
-7. Use place_order when the user wants to BUY/ORDER a specific product ("order this",
+7. Use place_order ONLY for an INDIVIDUAL personal purchase, never for bulk,
+   employee gifting, corporate or institutional procurement. For those requests
+   use the BULK ENQUIRY FLOW below even when the customer says "place order".
+   For an individual purchase of a specific product ("order this",
    "buy", "place an order", "I want to purchase"). Extract the product_id. Put the
-   returned order object in the "order" field and confirm warmly in "answer".
+   returned order object in the "order" field ONLY if it has an order_id and no error.
+   On an error, leave order empty and explain the actual error_code. Never translate
+   availability_unverified or a failed product lookup into "out of stock".
+   Pass the user's city when known. The current order tool creates local demo orders:
+   if is_demo is true, explicitly call it a demo order, never a real retailer purchase.
 8. Use track_order when the user wants the STATUS of an order ("track my order",
    "where is my order", "order status") and gives an order id like LOTUS1001. Put
    the returned order object in the "order" field.
-9. Use browse_catalog to show products from our in-store catalog when the user wants
-   to browse a category (e.g. "show me phones", "what TVs do you have") or as a
-   FALLBACK whenever search_products returns no results. Pass a category and/or
-   budget, and put the returned items in the "products" field.
+9. Use browse_catalog to browse indexed products by category and budget.
+   Search, recommendations and browsing use the same Pinecone product index.
+   If a tool returns an availability error, explain it; do not retry through another
+   product tool or invent products, specifications, prices or URLs. Empty results
+   mean no matches. Prices/stock are from a SQL snapshot, not live guarantees.
 10. SUPPORT TICKETS — when a customer reports a PROBLEM, complaint or issue (e.g.
     "my product is defective", "order not delivered", "I have a complaint",
     "something is broken", "I need help with an issue"):
@@ -307,6 +330,60 @@ TOOL USAGE RULES:
        returned ticket object in the "ticket" field and confirm the ticket id warmly.
     Only call raise_ticket when you actually have name, phone AND issue.
 11. DON'T use tools when discussing general product info that doesn't need specific details
+
+BULK ENQUIRY FLOW - applies when the CURRENT request is to arrange a bulk purchase:
+- A pending enquiry is not a lock on the conversation. Answer the CURRENT request
+  first: specifications -> product details; nearby store -> store lookup; compare
+  -> comparison. Do not call any bulk tool on those turns. Resume collection only
+  when the customer returns to their quotation request or supplies its details.
+- A customer message may both identify a product/quantity and ask for specifications.
+  Show the specifications first and remember the supplied details for later.
+  Example: "Show details for Morphy Richards 60 RCSS, 20" during bulk collection:
+  use the product details tool, NOT prepare_bulk_order_enquiry. Do not repeatedly
+  ask for the product/name/mobile already present in the customer messages.
+- Understand intent from the WHOLE conversation, not individual keywords. Employee,
+  staff/client gifting, corporate/institutional purchases, team equipment and bulk
+  units belong here. A single gift for one person is not automatically a bulk enquiry.
+- Gift ideas alone mean discovery: use existing search/recommendation tools. Do not
+  create any enquiry just because a company or employees were mentioned.
+- When the customer wants to proceed with a bulk purchase, collect the selected
+  product or product requirement, quantity, delivery city, contact name and phone.
+  Use known information. Ask one or two missing questions at a time in the user's
+  language. Never invent a quantity, city, name, phone, product ID or confirmation.
+- Ask company name, per-unit budget, desired delivery date, email, delivery PIN
+  and GST invoice requirement, 1-2 questions per turn. Each may be explicitly
+  declined/deferred; do not silently skip them. Do not ask for GSTIN or payment.
+  Reuse details already supplied; never repeatedly ask answered questions.
+  Preserve a known per-unit budget, but never call it a bulk quotation.
+- Never use placeholders such as "Corporate Customer", a default phone, 50 units
+  or Indore. Assistant messages, product examples and previous demo orders are NOT
+  evidence for customer details. A "yes" after product specs is product interest,
+  not a quantity, contact detail or approval of an enquiry summary.
+- Once every detail is supplied or explicitly deferred, call prepare_bulk_order_enquiry
+  with a verbatim customer quote for each field. Use the customer's wording for names,
+  city, purpose and deadline. The tool verifies quotes against the actual transcript.
+  Wait for a NEW customer turn after the prepared summary; never prepare and submit
+  in the same turn. If preparation fails, ask the missing questions and stop.
+- Show a short summary of product/requirement, units, city, contact and any supplied
+  company/budget/date. Explain this submits a quotation enquiry, not a confirmed
+  purchase. Ask explicit permission to submit. A previous "order this" or "okay"
+  before this summary is NOT approval of the completed summary.
+- After approval of the prepared summary call create_bulk_order_enquiry with
+  confirmed=true and confirmation_message copied from the CURRENT user message.
+  Never call it before prepare_bulk_order_enquiry. Any change needs a fresh prepared
+  summary and new approval. Use exactly the prepared details. Put its exact
+  successful object in bulk_enquiry; leave order and ticket empty. Confirm the BULK
+  enquiry reference and quotation-pending status, not "order successfully placed".
+- No successful tool result means no confirmation. On validation/save failure ask
+  for the missing detail or explain failure; NEVER fall back to place_order or
+  raise_ticket. Never invent dispatch/delivery dates, bulk discounts or reservations.
+- The enquiry is saved for admin review. There is no automatic team notification,
+  callback SLA or checkout integration: do not claim that staff were contacted.
+  Do not promise a call, a reply soon, or that the team will get back to the customer.
+  Say the enquiry is saved and pricing, stock and delivery await confirmation.
+- Example: "i want to giving the bulk order on this product" after Noise headphone
+  details -> ask "Kitne pieces chahiye, aur delivery kis city mein hogi?" (only ask
+  missing fields), NOT a demo order. "Haan" after a complete summary -> submit enquiry.
 
 IMPORTANT POLICY RESPONSE RULE:
 When using search_terms_conditions, DO NOT put raw policy sections in policy_info field. Instead:
@@ -434,6 +511,21 @@ CRITICAL POLICY_INFO RULES:
 ✅ Use the exact JSON structure returned by the tool without modification
 
 CONVERSATION INTELLIGENCE:
+- Requests like "tell me aviable", "which one is avaivle", "available options",
+  or agreement to an offer of alternatives mean SEARCH FOR AVAILABLE ALTERNATIVES.
+  Call recommend_products(in_stock_only=True) with the previous category, budget,
+  city and rejected product as based_on_product_id when known. Do not repeat the
+  rejected item's stock message or ask again whether they want recommendations.
+- For individual purchases only, "okay/yes/haan" after offering to order ONE specific product means call place_order
+  for that product. If several products were offered without a single selection,
+  ask which one. Resolve context from the immediately preceding exchange.
+- Only claim "in stock"/"out of stock" from stock_verified=true live tool results
+  for the customer's city. Snapshot listings, lookup errors and unknown values do
+  not establish current stock. Never say "order right away" from search results.
+- For availability_unverified, explain that stock could not be checked. Offer the
+  supplied product link or a stock recheck; do not invent availability for another item.
+- When the user has already requested alternatives or accepted an offer, act on it.
+  Do not repeat the same question in both answer and end.
 - Remember what products/stores were already shown
 - When user says "tell me more about that Samsung phone" - use get_filtered_product_details_tool with the product_id
 - When user says "what about the store timings" - answer from previous store results
@@ -452,20 +544,32 @@ SALES APPROACH:
 
 REMEMBER: Return ONLY the JSON structure above. NO additional text, NO markdown formatting, NO nested JSON strings."""
 
-# Create LLM class
-llm = ChatGoogleGenerativeAI(
-    model= "gemini-3.5-flash",
-    temperature=0.7,
-    max_retries=2,
-    google_api_key=google_api_key,
-    # Disable "thinking" so Gemini stops attaching large thought-signature blobs
-    # to messages. Those get stored in history and re-sent, wasting tokens.
-    thinking_budget=0,
-    include_thoughts=False,
-)
+PRIMARY_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
+FALLBACK_GEMINI_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash")
+logger = logging.getLogger(__name__)
 
-# Bind tools to the model
-model = llm.bind_tools(tools)
+
+def _build_model(model_name):
+    """Build a tool-capable Gemini client with bounded SDK retries."""
+    return ChatGoogleGenerativeAI(
+        model=model_name,
+        temperature=0.2,
+        max_retries=3,
+        google_api_key=google_api_key,
+    ).bind_tools(tools)
+
+
+# Use a second model only when the primary provider request fails. This keeps
+# tool schemas and the customer-facing JSON contract unchanged.
+model = _build_model(PRIMARY_GEMINI_MODEL)
+fallback_model = (
+    _build_model(FALLBACK_GEMINI_MODEL)
+    if FALLBACK_GEMINI_MODEL != PRIMARY_GEMINI_MODEL else None
+)
+# Render tool results with a client that has no tools bound. A prompt saying
+# "do not call tools again" alone did not prevent a second, unrelated bulk call.
+response_model = model.bound
+fallback_response_model = fallback_model.bound if fallback_model else None
 
 # Test the model with tools
 # res=model.invoke(f"What is the weather in Berlin on {datetime.today()}?")
@@ -477,17 +581,33 @@ from langchain_core.runnables import RunnableConfig
 
 tools_by_name = {tool.name: tool for tool in tools}
 
-def call_tool(state: AgentState):
+def call_tool(state: AgentState, config: RunnableConfig):
     outputs = []
+    structured = {}
     user_id = state.get("user_id", "default_user")
+    bulk_tools = {"create_bulk_order_enquiry", "prepare_bulk_order_enquiry"}
+    selected_tools = {call["name"] for call in state["messages"][-1].tool_calls}
+    mixed_bulk_turn = bool(selected_tools & bulk_tools and selected_tools - bulk_tools)
     
     print(f"🔧 Executing tool calls for user: {user_id}")
     
     # Iterate over the tool calls in the last message
     for tool_call in state["messages"][-1].tool_calls:
-        print(f"🛠️  Calling tool: {tool_call['name']} with args: {tool_call['args']}")
+        print(f"Calling tool: {tool_call['name']}; argument fields: {list(tool_call['args'])}")
         # Get the tool by name
-        tool_result = tools_by_name[tool_call["name"]].invoke(tool_call["args"])
+        if mixed_bulk_turn and tool_call["name"] in bulk_tools:
+            tool_result = json.dumps({"error": "Bulk submission/preparation is deferred. Answer the product/store/information request from the other tool results first."})
+        else:
+            tool_result = tools_by_name[tool_call["name"]].invoke(tool_call["args"], config=config)
+        if tool_call["name"] in bulk_tools and not mixed_bulk_turn:
+            if isinstance(tool_result, str):
+                try:
+                    tool_result = json.loads(tool_result)
+                except ValueError:
+                    pass
+            structured["bulk_enquiry"] = tool_result if isinstance(tool_result, dict) else {
+                "error": tool_result, "error_code": "bulk_validation_failed"}
+            tool_result = json.dumps(structured["bulk_enquiry"], ensure_ascii=False)
         print(f"📋 Tool result length: {len(str(tool_result))} characters")
         
         tool_message = ToolMessage(
@@ -501,7 +621,7 @@ def call_tool(state: AgentState):
         # redis_memory.add_message_to_user(user_id, tool_message)
     
     print(f"🎯 Returning {len(outputs)} tool message(s)")
-    return {"messages": outputs}
+    return {"messages": outputs, **structured}
 
 
 def call_model(
@@ -542,18 +662,54 @@ def call_model(
     
     # For Gemini, we need to ensure proper message sequence
     # Use only the current conversation state messages with system prompt
-    messages_with_system = [SystemMessage(content=SYSTEM_PROMPT)] + messages
+    rendering_tools = bool(messages and getattr(messages[-1], "type", None) == "tool")
+    messages_for_model = messages
+    if rendering_tools:
+        # Keep every result when the first decision selected multiple tools. Do
+        # not replay historical tool calls or expose tools in this response phase.
+        start = len(messages) - 1
+        while start >= 0 and getattr(messages[start], "type", None) == "tool":
+            start -= 1
+        results = [{"tool": m.name, "result": message_text(m.content)} for m in messages[start + 1:]]
+        messages_for_model = list(messages[:start]) + [HumanMessage(content=(
+            "Answer the customer's latest request using these tool results as data. "
+            "Do not restart another flow or claim a successful action on an error. "
+            "For validation errors, ask only genuinely missing details, using the customer history. "
+            "Return JSON only. Results: " + json.dumps(results, ensure_ascii=False)))]
+    from live_product_enrichment import enabled as live_enabled
+    system_prompt = SYSTEM_PROMPT
+    if live_enabled():
+        system_prompt += (
+            "\nLIVE CATALOGUE MODE: For current prices or availability, call a product tool "
+            "on this turn using the customer's city. Current-turn tool price_verified, "
+            "stock_verified and checked_at fields override historical/snapshot values. "
+            "Do not quote a current price when price_verified is false; say it could not "
+            "be verified. Unknown stock is not out of stock. Preserve the exact product "
+            "IDs and backend card fields. Budget results cover only the checked candidates."
+        )
+    messages_with_system = [SystemMessage(content=system_prompt)] + messages_for_model
+    selected_model = response_model if rendering_tools else model
+    selected_fallback = fallback_response_model if rendering_tools else fallback_model
     
     try:
-        # Invoke the model with the system prompt and the messages
-        response = model.invoke(messages_with_system, config)
+        # Invoke the primary model, then make one model-level fallback attempt
+        # for temporary provider failures such as 503 or exhausted model quota.
+        try:
+            response = selected_model.invoke(messages_with_system, config)
+        except Exception as primary_error:
+            if not selected_fallback:
+                raise
+            logger.warning("Primary Gemini model %s failed (%s); using fallback %s",
+                           PRIMARY_GEMINI_MODEL, type(primary_error).__name__,
+                           FALLBACK_GEMINI_MODEL)
+            response = selected_fallback.invoke(messages_with_system, config)
         
         # Debug: Check if the model called any tools
         if hasattr(response, 'tool_calls') and response.tool_calls:
             print(f"✅ Model called {len(response.tool_calls)} tool(s): {[tc['name'] for tc in response.tool_calls]}")
             # Debug: Show tool parameters
             for tool_call in response.tool_calls:
-                print(f"🔧 Tool parameters: {tool_call['args']}")
+                print(f"Tool parameter fields: {list(tool_call['args'])}")
         else:
             print("⚠️  Model did not call any tools")
             # Debug: Show response content preview
@@ -568,18 +724,14 @@ def call_model(
         # Persist only final assistant text. Saving an AI tool-call without its
         # matching ToolMessage creates an invalid/incomplete history on the next
         # request (ToolMessages are intentionally not stored in Redis).
-        if (
-            hasattr(response, 'type')
-            and response.type == 'ai'
-            and not getattr(response, 'tool_calls', None)
-        ):
-            redis_memory.add_message_to_user(user_id, response)
+        # Only the final normalized response is persisted by chat_with_agent.
 
         # We return a list, because this will get added to the existing messages state using the add_messages reducer
         return {"messages": [response]}
         
     except Exception as e:
-        print(f"❌ Error in call_model: {e}")
+        logger.exception("Gemini request failed after configured fallbacks")
+        print(f"❌ Error in call_model: {type(e).__name__}", flush=True)
         # Create a simple error response
         from langchain_core.messages import AIMessage
         error_response = AIMessage(content=json.dumps({
@@ -626,6 +778,7 @@ workflow = StateGraph(AgentState)
 # 1. Add our nodes 
 workflow.add_node("llm", call_model)
 workflow.add_node("tools",  call_tool)
+workflow.add_node("respond", call_model)
 # 2. Set the entrypoint as `agent`, this is the first node called
 workflow.set_entry_point("llm")
 # 3. Add a conditional edge after the `llm` node is called.
@@ -644,26 +797,12 @@ workflow.add_conditional_edges(
     },
 )
 # 4. Add a conditional edge after `tools` is called to continue back to LLM for processing
-workflow.add_conditional_edges(
-    # Edge is used after the `tools` node is called.
-    "tools",
-    # The function that will determine what happens after tool execution
-    should_continue,
-    # Tools now return data to LLM for intelligent processing
-    {
-        # Continue back to LLM for intelligent response creation
-        "continue": "llm",
-        # End only when LLM creates final response
-        "end": END,
-    },
-)
+workflow.add_edge("tools", "respond")
+workflow.add_edge("respond", END)
 
-# Add checkpointing for better state management and recovery
-from langgraph.checkpoint.memory import MemorySaver
-checkpointer = MemorySaver()
-
-# Now we can compile and visualize our graph with checkpointing
-graph = workflow.compile(checkpointer=checkpointer)
+# SQLite/Redis supply the conversation once per request. Retaining the same
+# history in a graph checkpoint appended duplicates and replayed old tool turns.
+graph = workflow.compile()
 
 from datetime import datetime
 
@@ -685,7 +824,7 @@ def display_user_stats(user_id: str):
     print(f"Active users: {len(redis_memory.get_active_users())}")
     print("-" * 30)
 
-def _run_agent(message: str, session_id: str = "default_session") -> str:
+def _run_agent(message: str, session_id: str = "default_session", *, actions=None) -> str:
     """
     Chat with the Lotus Electronics agent for Flask integration.
 
@@ -703,8 +842,9 @@ def _run_agent(message: str, session_id: str = "default_session") -> str:
         # Make the session available to order tools and log the user's message
         set_current_session(session_id)
         try:
-            store.log_message(session_id, "user", message)
+            current_message_id = store.log_message(session_id, "user", message)
         except Exception as log_err:
+            current_message_id = None
             print(f"⚠️  Failed to log user message: {log_err}")
 
         # Check Redis connection health
@@ -721,11 +861,16 @@ def _run_agent(message: str, session_id: str = "default_session") -> str:
         if redis_available:
             previous_messages = redis_memory.get_user_messages(user_id)
         
-        # Filter and limit conversation history for better Gemini compatibility
-        context_messages = []
-        for msg in previous_messages[-6:]:  # Only last 6 messages for context
-            if hasattr(msg, 'type') and msg.type in ['human', 'ai']:
-                context_messages.append(msg)
+        # Use each actual message exactly once, including the fields/cards the
+        # customer has already supplied or seen. Cache is only a legacy fallback.
+        try:
+            rows = store.get_chat_context(session_id)
+            rows = [row for row in rows if current_message_id is None or row['id'] < current_message_id]
+            context_messages = build_chat_context(rows, previous_messages)
+        except Exception:
+            context_messages = [msg for msg in previous_messages[-40:]
+                                if getattr(msg, 'type', None) in ('human', 'ai')
+                                and not getattr(msg, 'tool_calls', None)]
         
         # Save user message to Redis memory if available
         if redis_available:
@@ -736,10 +881,11 @@ def _run_agent(message: str, session_id: str = "default_session") -> str:
         inputs = {
             "messages": all_messages,
             "user_id": user_id,
-            "number_of_steps": 0
+            "number_of_steps": 0,
+            "bulk_enquiry": {},
         }
         
-        # Configure checkpointing with thread ID based on session.
+        # Pass the session to tools; conversation state comes from durable logs.
         # recursion_limit caps how many graph steps run before LangGraph stops,
         # a hard guard against tool-call loops.
         config = {
@@ -755,6 +901,11 @@ def _run_agent(message: str, session_id: str = "default_session") -> str:
 
         try:
             for state in graph.stream(inputs, config=config, stream_mode="values"):
+                from live_product_enrichment import enabled as live_enabled, collect_live_products
+                if actions is not None and live_enabled():
+                    actions["live_products"] = collect_live_products(state.get("messages", []))
+                if actions is not None and state.get("bulk_enquiry"):
+                    actions["bulk_enquiry"] = state["bulk_enquiry"]
                 response_count += 1
                 if response_count > max_iterations:
                     print("⚠️  Max iterations reached - stopping graph stream")
@@ -997,16 +1148,33 @@ def chat_with_agent(message: str, session_id: str = "default_session") -> str:
     Wraps `_run_agent` so every turn's assistant answer is logged to SQLite for
     the admin portal. Logging failures never affect the returned response.
     """
-    response = _run_agent(message, session_id)
+    actions = {}
+    response = _run_agent(message, session_id, actions=actions)
+    try:
+        parsed_response = json.loads(response)
+        if isinstance(parsed_response, dict):
+            from live_product_enrichment import enabled as live_enabled, normalize_live_response
+            if live_enabled():
+                parsed_response = normalize_live_response(parsed_response, actions.get("live_products", {}))
+            response = json.dumps(normalize_bulk_response(
+                parsed_response, actions.get("bulk_enquiry", {})), ensure_ascii=False)
+    except (ValueError, TypeError):
+        pass
     try:
         answer_text = response
+        parsed = None
         try:
             parsed = json.loads(response)
             if isinstance(parsed, dict) and parsed.get("answer"):
                 answer_text = parsed["answer"]
         except Exception:
             pass
-        store.log_message(session_id, "assistant", answer_text)
+        message_id = store.log_message(session_id, "assistant", answer_text, response_json=response)
+        from langchain_core.messages import AIMessage
+        redis_memory.add_message_to_user(session_id, AIMessage(content=response))
+        draft = parsed.get("bulk_draft", {}) if isinstance(parsed, dict) else {}
+        if draft.get("draft_id") and message_id:
+            store.mark_bulk_draft_shown(session_id, draft["draft_id"], message_id)
     except Exception as log_err:
         print(f"⚠️  Failed to log assistant message: {log_err}")
     return response

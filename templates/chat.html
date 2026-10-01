@@ -1,179 +1,79 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lotus Shopping Assistant</title>
+    <meta name="theme-color" content="#007b88">
+    <meta name="description" content="Find your next favourite tech with Lotus. Explore electronics, compare your options and get help from your personal shopping assistant.">
+    <title>Lotus AI — Your personal tech guide</title>
+    <link rel="icon" href="/static/images/logo-chat.jpg">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <!-- <link href="chatbot-style.css" rel="stylesheet"> -->
     <link rel="stylesheet" href="/static/css/chatbot-style-sale.css">
-
-
-
-    
+    <link rel="stylesheet" href="/static/css/lotus-assistant.css?v=20260930-online-pricing-3">
 </head>
-
-<body>
-    <!-- Chat Toggle Button -->
-    <div class="chat-toggle" id="chatToggle">
-        <i class="fas fa-comments"></i>
-        <span class="notification-badge" id="notificationBadge">1</span>
-    </div>
-
-    <!-- Chat Container -->
-    <div class="chat-container" id="chatContainer">
-        <!-- Chat Header -->
-        <div class="chat-header">
-            <div class="d-flex align-items-center">
-                <div class="avatar me-3">
-                    <i class="fas fa-headset"></i>
-                </div>
-                <div>
-                    <h6 class="mb-0 text-white">Lotus Shopping Assistant</h6>
-                    <small class="text-white-50">
-                        <span class="status-indicator"></span>
-                        Online now
-                    </small>
-                </div>
-            </div>
-            <div class="chat-header-actions">
-                <button
-                    type="button"
-                    class="chat-back-btn"
-                    aria-label="Back to Lotus Electronics"
-                    onclick="window.opener ? window.close() : window.location.assign('https://www.lotuselectronics.com/')">
-                    <i class="fas fa-arrow-left"></i>
-                    <span>Back</span>
-                </button>
-                <button class="btn btn-link text-white p-0" id="minimizeChat" aria-label="Minimize chat">
-                    <i class="fas fa-minus"></i>
-                </button>
-            </div>
-        </div>
-
-        <!-- Quick Actions -->
-        <div class="quick-actions" id="quickActions">
-            <div class="row g-2">
-                <div class="col-4">
-                    <button class="quick-action-btn" data-category="television">
-                        <i class="fas fa-tv"></i>
-                        <span>Television</span>
-                    </button>
-                </div>
-                <div class="col-4">
-                    <button class="quick-action-btn" data-category="smartphone">
-                        <i class="fas fa-mobile-alt"></i>
-                        <span>Smartphone</span>
-                    </button>
-                </div>
-                <div class="col-4">
-                    <button class="quick-action-btn" data-category="laptop">
-                        <i class="fas fa-laptop"></i>
-                        <span>Laptop</span>
-                    </button>
-                </div>
-                <div class="col-4">
-                    <button class="quick-action-btn" data-category="homeappliance">
-                        <i class="fas fa-home"></i>
-                        <span>Home Ap.</span>
-                    </button>
-                </div>
-                <div class="col-4">
-                    <button class="quick-action-btn" data-category="kitchenappliance">
-                        <i class="fas fa-blender"></i>
-                        <span>Kitchen Ap.</span>
-                    </button>
-                </div>
-                <div class="col-4">
-                    <button class="quick-action-btn" data-category="ac">
-                        <i class="fas fa-snowflake"></i>
-                        <span>AC</span>
-                    </button>
-                </div>
-                <div class="col-4">
-                    <button class="quick-action-btn" data-category="recommend">
-                        <i class="fas fa-wand-magic-sparkles"></i>
-                        <span>Recommend</span>
-                    </button>
-                </div>
-                <div class="col-4">
-                    <button class="quick-action-btn" data-category="trackorder">
-                        <i class="fas fa-truck-fast"></i>
-                        <span>Track Order</span>
-                    </button>
-                </div>
-                <div class="col-4">
-                    <button class="quick-action-btn" data-category="raiseticket">
-                        <i class="fas fa-headset"></i>
-                        <span>Report Issue</span>
-                    </button>
-                </div>
-
-            </div>
-        </div>
-
-        <!-- Chat Messages -->
-        <div class="chat-messages" id="chatMessages">
-            <div class="message bot-message">
-                <div class="message-avatar">
-                    <i class="fas fa-headset"></i>
-                </div>
-                <div class="message-content">
-                    <div class="message-bubble">
-                        <p class="mb-1">Hello! 👋 Welcome to Lotus Electronics!</p>
-                        <p class="mb-0">What are you shopping for today? You can choose from the categories above or
-                            type your question.</p>
+<body class="assistant-page" >
+    <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+            <symbol id="icon-spark" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/><path d="m20 2 .6 1.4L22 4l-1.4.6L20 6l-.6-1.4L18 4l1.4-.6L20 2Z"/></symbol>
+            <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+            <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+            <symbol id="icon-pin" viewBox="0 0 24 24"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+            <symbol id="icon-bag" viewBox="0 0 24 24"><path d="M5 7h14l1 14H4L5 7Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></symbol>
+            <symbol id="icon-chat" viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-2 2V11.5a9.5 9.5 0 0 1 19 0Z"/><path d="M7 10h9M7 14h5"/></symbol>
+            <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+            <symbol id="icon-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></symbol>
+            <symbol id="icon-compare" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="16" rx="2"/><rect x="14" y="4" width="7" height="16" rx="2"/><path d="M6 8h1m10 0h1M6 12h1m10 0h1"/></symbol>
+            <symbol id="icon-headset" viewBox="0 0 24 24"><path d="M4 14v-3a8 8 0 0 1 16 0v6a4 4 0 0 1-4 4h-3"/><rect x="3" y="11" width="4" height="7" rx="2"/><rect x="17" y="11" width="4" height="7" rx="2"/></symbol>
+            <symbol id="icon-external" viewBox="0 0 24 24"><path d="M14 4h6v6m0-6L10 14m0-10H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5"/></symbol>
+        </defs>
+    </svg>
+    <a class="skip-link" href="#messageInput">Skip to chat</a>
+    <main class="chat-shell" aria-label="Lotus shopping assistant">
+        <section class="chat-container active" id="chatContainer" aria-labelledby="assistantTitle">
+            <header class="chat-header">
+                <div class="assistant-identity"><img class="assistant-logo" src="/static/images/lotus-logo.png" width="100" height="45" alt="Lotus Electronics"><div><h1 id="assistantTitle">Shopping assistant <span class="assistant-label">AI</span></h1><p><span class="status-dot"></span> Here to help you find your next favourite</p></div></div>
+                <button type="button" id="minimizeChat" hidden aria-label="Minimize chat"></button>
+            </header>
+            <div class="assistant-context"><svg class="ui-icon" aria-hidden="true"><use href="#icon-spark"/></svg> A little guidance. A smarter purchase.</div>
+            <div class="chat-messages" id="chatMessages" role="log" aria-label="Conversation with Lotus AI" aria-live="polite" aria-relevant="additions" tabindex="0">
+                        <div class="message bot-message welcome-message">
+                            <div class="message-avatar"><img src="/static/images/logo-chat.jpg" alt="Lotus AI" width="28" height="28"></div>
+                            <div class="message-content"><span class="message-author">LOTUS AI</span><div class="message-bubble"><p class="welcome-title">Hi there. Welcome to Lotus! <span aria-hidden="true">✦</span></p><p>Great tech starts with the right advice. I’m here to help you find your perfect match.</p><p class="welcome-question">What can I help you discover today?</p></div><small class="message-time">Here whenever you need a hand</small></div>
+                        </div>
+                <div class="quick-actions" id="quickActions">
+                    <div class="category-heading"><h2>What are you shopping for?</h2><span>Pick a category to get started</span></div>
+                    <div class="chat-category-grid">
+                        <button type="button" class="quick-action-btn category-button" data-category="television"><img src="/static/images/lotus-3d/tv.png" alt="" width="88" height="72"><span>Televisions</span></button>
+                        <button type="button" class="quick-action-btn category-button" data-category="smartphone"><img src="/static/images/lotus-3d/phone.png" alt="" width="88" height="72"><span>Smartphones</span></button>
+                        <button type="button" class="quick-action-btn category-button" data-category="laptop"><img src="/static/images/lotus-3d/laptop.png" alt="" width="88" height="72"><span>Laptops</span></button>
+                        <button type="button" class="quick-action-btn category-button" data-category="homeappliance"><img src="/static/images/lotus-3d/washer.png" alt="" width="88" height="72"><span>Home appliances</span></button>
+                        <button type="button" class="quick-action-btn category-button" data-category="kitchenappliance"><img src="/static/images/lotus-3d/blender.png" alt="" width="88" height="72"><span>Kitchen appliances</span></button>
+                        <button type="button" class="quick-action-btn category-button" data-category="ac"><img src="/static/images/lotus-3d/ac.png" alt="" width="88" height="72"><span>Air conditioners</span></button>
                     </div>
-                    <small class="message-time">Just now</small>
+                    <div class="service-actions" aria-label="More ways we can help">
+                        <button type="button" class="quick-action-btn service-button" data-category="recommend"><svg class="ui-icon" aria-hidden="true"><use href="#icon-spark"/></svg><span>Recommend</span></button>
+                        <button type="button" class="quick-action-btn service-button" data-category="trackorder"><svg class="ui-icon" aria-hidden="true"><use href="#icon-bag"/></svg><span>Track order</span></button>
+                        <button type="button" class="quick-action-btn service-button" data-category="raiseticket"><svg class="ui-icon" aria-hidden="true"><use href="#icon-headset"/></svg><span>Get support</span></button>
+                        <button type="button" class="quick-action-btn service-button" data-category="storelocator"><svg class="ui-icon" aria-hidden="true"><use href="#icon-pin"/></svg><span>Find a store</span></button>
+                    </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Typing Indicator -->
-        <div class="typing-indicator" id="typingIndicator">
-            <div class="message-avatar">
-                <i class="fas fa-headset"></i>
-            </div>
-            <div class="typing-dots">
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-        </div>
-
-        <!-- Chat Input -->
-        <div class="chat-input">
-            <div class="input-group">
-                <input type="text" class="form-control" placeholder="Type your message..." id="messageInput">
-                <button class="btn btn-primary" type="button" id="sendBtn">
-                    <i class="fas fa-paper-plane"></i>
-                </button>
-            </div>
-        </div>
-
-        <!-- Chat Footer -->
-        <div class="chat-footer">
-            <small class="text-muted">
-                <i class="fas fa-shield-alt me-1"></i>
-                Your conversations are secure and encrypted
-            </small>
-        </div>
-    </div>
-
-    <!-- Overlay -->
+                    <div class="typing-indicator" id="typingIndicator" role="status" aria-label="Lotus AI is replying"><div class="message-avatar"><img src="/static/images/logo-chat.jpg" alt="" width="28" height="28"></div><div class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></div><span class="typing-label">Finding a little clarity…</span></div>
+                    <div class="chat-input">
+                        <div class="composer-caption"><button type="button" id="showCategories" aria-controls="quickActions" aria-expanded="true"><svg class="ui-icon" aria-hidden="true"><use href="#icon-bag"/></svg> Browse categories</button><span>YOUR PERSONAL TECH GUIDE</span></div>
+                        <div class="input-group"><input type="text" class="form-control" placeholder="Ask me anything about electronics…" id="messageInput" aria-label="Message Lotus AI" autocomplete="off"><button class="btn btn-primary" type="button" id="sendBtn" aria-label="Send message"><svg class="ui-icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button></div>
+                        <div class="composer-hint"><span>Type in English or Hindi</span><span class="enter-hint">Enter <span aria-hidden="true">↵</span> to send</span></div>
+                    </div>
+                    <footer class="chat-footer"><svg class="ui-icon" aria-hidden="true"><use href="#icon-shield"/></svg><span>AI can make mistakes. Confirm details before buying.</span></footer>
+        </section>
+        <!-- Keep the original ChatBot element IDs; this page always shows the chat. -->
+        <button type="button" class="chat-toggle" id="chatToggle" hidden aria-label="Open Lotus shopping assistant"><span class="notification-badge" id="notificationBadge" hidden>1</span></button>
+    </main>
     <div class="chat-overlay" id="chatOverlay"></div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- <script src="chatbot.js"></script> -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    
-    <script src="/static/js/chatbot-sale.js"></script>
-
-
+    <script src="/static/js/chatbot-sale.js?v=20260930-bulk-details-4"></script>
+    <script src="/static/js/lotus-ui.js?v=20260929-direct-chat-2"></script>
 </body>
-
 </html>
