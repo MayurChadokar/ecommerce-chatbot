@@ -41,6 +41,9 @@ The LLM cannot broaden a known selected category. `data.selectedCategory` echoes
 Product cards are in `data.products` and include existing `product_id`,
 `product_name`, `product_mrp` (formatted online price), `selling_price`,
 `product_url`, `product_image`, features, and verified availability fields.
+Verified MRP is also returned as `product_msrp` for existing Lotus product-card
+bindings. `uri_slug` and `product_url` use the live API's complete category/product
+path when available, so View product opens the current storefront route.
 This endpoint also includes `brand`, `category`, and `sku`.
 
 Complete captured HTTP request/response examples (real catalogue data, not mocks):
@@ -111,6 +114,12 @@ those cards remain explicitly unverified and cannot confirm a current budget mat
 Missing price/stock is marked unknown. Partial
 verification is reported in `data.verification`; do not treat an unverified
 price as zero or unknown stock as out of stock.
+
+Products that the live API confirms as out of stock are excluded from discovery
+results and alternatives. `verification.outOfStockCount` reports how many checked
+candidates were excluded. Pages can contain fewer results after these live checks;
+`pagination.nextPage` continues through the ranked candidate window. API failures
+still produce explicitly labelled catalogue fallbacks with unknown stock.
 
 ## AI and failures
 
@@ -259,8 +268,26 @@ development port is not rate limited. No frontend or nginx changes are included.
 
 ## Angular integration
 
-Use your same-origin backend proxy (or configure the deployment's allowed CORS
-origin) and keep the existing product-card component:
+The two smart-search routes allow cross-origin requests from any origin by
+default, including `http://localhost:4200`, `http://localhost:4000`, and any
+other frontend port or domain, using `Access-Control-Allow-Origin: *`.
+JSON POST preflight requests are handled automatically, and success and error
+responses include CORS headers for allowed origins. CORS is scoped to these
+routes; it does not apply to admin or chat routes.
+
+To enable this on a deployment that already has an origin list configured, set
+the backend `.env` to the following and restart Gunicorn/PM2:
+
+```dotenv
+SMART_SEARCH_CORS_ORIGINS=*
+```
+
+You can optionally restrict access by replacing `*` with exact origins separated
+by commas. An empty value disables cross-origin access. Allowed request headers are `Content-Type`,
+`Authorization`, `auth-key`, `auth-token`, and `end-client`. Search is public and
+does not require cookies or `withCredentials`. Keep Lotus API tokens on the
+backend. Use a same-origin backend proxy or the chatbot's absolute HTTPS URL
+when integrating from another origin, and keep the existing product-card component:
 
 ```typescript
 this.http.post<any>('/api/search/smart', {

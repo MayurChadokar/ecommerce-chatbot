@@ -85,6 +85,22 @@ class LiveTests(unittest.TestCase):
     def test_boundary_is_inclusive(self):
         self.assertEqual(len(self.run_search(live(price=35000), price_max=35000)[0]), 1)
 
+    def test_live_mrp_alias_and_category_url_reach_public_cards(self):
+        _, response, _ = self.run_search(live(mrp=50000, uri_slug="refrigerators/current-fridge"))
+        card = response["products"][0]
+        self.assertEqual(card["mrp"], 50000)
+        self.assertEqual(card["product_msrp"], 50000)
+        self.assertEqual(card["uri_slug"], "refrigerators/current-fridge")
+        self.assertEqual(card["product_url"], "https://www.lotuselectronics.com/product/refrigerators/current-fridge/1")
+
+    def test_discovery_excludes_live_out_of_stock_products(self):
+        self.search.index.query.return_value.matches.append(SimpleNamespace(id="2", score=.8, metadata=metadata("2")))
+        with patch("tools.Product_details.fetch_live_details", side_effect=lambda pid, city: live(pid=pid, stock="No" if pid == 1 else "Yes")):
+            results = self.search.search_products("fridge")
+        self.assertEqual([r["product_id"] for r in results], ["2"])
+        self.assertEqual(results.verification["out_of_stock_count"], 1)
+        self.assertTrue(results.verification["complete"])
+
     def test_api_failure_shows_labelled_catalogue_price_and_marks_stock_unknown(self):
         _, response, _ = self.run_search({"error": "unavailable"})
         card = response["products"][0]

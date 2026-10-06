@@ -1,4 +1,6 @@
 """Public website endpoint, independent of chatbot sessions and tools."""
+import os
+
 from flask import Blueprint, current_app, jsonify, request
 from smart_search import SearchUnavailable, SmartSearch
 
@@ -6,6 +8,26 @@ from smart_search import SearchUnavailable, SmartSearch
 def create_smart_search_blueprint(catalogue, ai_client):
     api = Blueprint("smart_search", __name__)
     service = SmartSearch(catalogue, ai_client)
+    cors_origins = frozenset(
+        origin.strip() for origin in os.getenv(
+            "SMART_SEARCH_CORS_ORIGINS", "*",
+        ).split(",") if origin.strip()
+    )
+
+    @api.after_request
+    def allow_website_origin(response):
+        # Blueprint scope keeps CORS limited to the two public search routes.
+        response.vary.add("Origin")
+        origin = request.headers.get("Origin")
+        if origin and ("*" in cors_origins or origin in cors_origins):
+            response.headers["Access-Control-Allow-Origin"] = "*" if "*" in cors_origins else origin
+            if request.method == "OPTIONS":
+                response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+                response.headers["Access-Control-Allow-Headers"] = (
+                    "Content-Type, Authorization, auth-key, auth-token, end-client"
+                )
+                response.headers["Access-Control-Max-Age"] = "600"
+        return response
 
     @api.post("/api/search/smart")
     @api.post("/smart/search")

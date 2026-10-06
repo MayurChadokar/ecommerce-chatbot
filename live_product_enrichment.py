@@ -7,6 +7,7 @@ import os
 import threading
 
 from product_availability import availability_fields
+from product_index import product_url
 from product_pricing import price_number, pricing_fields
 
 _pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="lotus-live")
@@ -64,6 +65,9 @@ def merge_live(record, detail, city):
     if detail.get("stock_city") != city:
         return result
     result.update(source="live_api", checked_at=detail.get("checked_at") or datetime.now(timezone.utc).isoformat())
+    live_url = product_url(detail.get("uri_slug"), record["product_id"])
+    if live_url:
+        result.update(product_url=live_url, uri_slug=detail["uri_slug"])
     result.update(availability_fields(detail.get("instock"), live=True, city=city))
     # Only the current API price can become a current card/filter price.
     price = price_number(detail.get("selling_price"))
@@ -117,7 +121,10 @@ def enrich(records, *, top_k, city, price_min=None, price_max=None, fetch=None):
         price = record["price"] if record["price_verified"] else record.get("catalogue_price")
         return price is not None and (price_min is None or price >= price_min) and (price_max is None or price <= price_max)
 
-    filtered = [r for r in merged if not budget or budget_match(r)]
+    # Discovery must not recommend products the current API confirms are sold out.
+    # Unverified catalogue fallbacks keep their explicit unknown-stock labels.
+    filtered = [r for r in merged if r["availability_status"] != "out_of_stock"
+                and (not budget or budget_match(r))]
     if budget and unknown_price and not filtered:
         # During an outage, also use the remaining already-retrieved Pinecone
         # candidates. No additional API calls or catalogue-wide scan are made.
@@ -130,6 +137,7 @@ def enrich(records, *, top_k, city, price_min=None, price_max=None, fetch=None):
     return LiveResults(filtered[:top_k], {
         "enabled": True, "city": city, "candidate_count": len(candidates),
         "price_unverified_count": unknown_price, "stock_unverified_count": unknown_stock,
+        "out_of_stock_count": sum(r["availability_status"] == "out_of_stock" for r in merged),
         "complete": unknown_price == 0 and unknown_stock == 0,
         "catalogue_fallback_count": sum(bool(r.get("catalogue_fallback")) for r in filtered[:top_k]),
         "scope": "retrieved_candidates_only", "cached": False,
@@ -144,9 +152,13 @@ def live_card_fields(record):
         "instock", "availability_status", "stock_verified", "stock_source", "stock_city",
         "price_verified", "price_source", "source", "checked_at", "verification_message",
         "snapshot_instock",
+        "uri_slug",
         "catalogue_fallback", "catalogue_price",
     ) if key in record}
     fields["product_mrp"] = f"₹{record['price']:,.2f}" if record.get("price_verified") else "Price unavailable"
+    if record.get("price_verified") and record.get("mrp") is not None:
+        # Existing Lotus product components bind the raw list-price field.
+        fields["product_msrp"] = record["mrp"]
     if not record.get("price_verified") and record.get("catalogue_price") is not None:
         fields["price_source"] = "sql_snapshot"
     return fields

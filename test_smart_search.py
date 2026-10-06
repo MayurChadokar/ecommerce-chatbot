@@ -810,8 +810,80 @@ class SemanticInterpretationTests(unittest.TestCase):
 class EndpointTests(unittest.TestCase):
     def setUp(self):
         self.app = Flask(__name__)
-        self.app.register_blueprint(create_smart_search_blueprint(Mock(), Mock()))
+        with patch.dict(os.environ, {}, clear=True):
+            self.app.register_blueprint(create_smart_search_blueprint(Mock(), Mock()))
         self.client = self.app.test_client()
+
+    @patch("smart_search_api.SmartSearch.search")
+    def test_cors_preflight_on_both_aliases_skips_search(self, search):
+        for path in ("/smart/search", "/api/search/smart"):
+            for origin in ("https://www.lotuselectronics.com", "https://lotuselectronics.com",
+                           "http://localhost:4200", "http://localhost:4000",
+                           "http://localhost:5173", "http://127.0.0.1:8080",
+                           "https://another-frontend.example:8443", "null"):
+                with self.subTest(path=path, origin=origin):
+                    response = self.client.options(path, headers={
+                        "Origin": origin,
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": "content-type,auth-key,auth-token,end-client",
+                    })
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.headers["Access-Control-Allow-Origin"], "*")
+                    self.assertEqual(response.headers["Access-Control-Allow-Methods"], "POST, OPTIONS")
+                    allowed = {h.strip().lower() for h in response.headers["Access-Control-Allow-Headers"].split(",")}
+                    self.assertTrue({"content-type", "auth-key", "auth-token", "end-client"} <= allowed)
+                    self.assertIn("Origin", response.vary)
+                    self.assertNotIn("Access-Control-Allow-Credentials", response.headers)
+        search.assert_not_called()
+
+    @patch("smart_search_api.SmartSearch.search")
+    def test_cors_on_success_validation_and_service_errors(self, search):
+        origin = "http://localhost:4000"
+        for path in ("/smart/search", "/api/search/smart"):
+            for body, error, status in (
+                ({"query": "fridge"}, None, 200),
+                ({"query": "x"}, None, 400),
+                ({"query": "fridge"}, SearchUnavailable("Unavailable"), 503),
+            ):
+                with self.subTest(path=path, status=status):
+                    search.return_value = {"products": []}
+                    search.side_effect = error
+                    response = self.client.post(path, json=body, headers={"Origin": origin})
+                    self.assertEqual(response.status_code, status)
+                    self.assertEqual(response.headers["Access-Control-Allow-Origin"], "*")
+                    self.assertIn("Origin", response.vary)
+
+    def test_cors_stays_scoped_and_does_not_require_an_origin(self):
+        self.app.add_url_rule("/admin/api/stats", view_func=lambda: {"private": True})
+        response = self.client.options("/smart/search")
+        self.assertNotIn("Access-Control-Allow-Origin", response.headers)
+        response = self.client.get("/admin/api/stats", headers={"Origin": "http://localhost:4200"})
+        self.assertNotIn("Access-Control-Allow-Origin", response.headers)
+
+    def test_cors_can_be_restricted_to_exact_origins(self):
+        with patch.dict(os.environ, {"SMART_SEARCH_CORS_ORIGINS": "https://www.lotuselectronics.com"}):
+            app = Flask(__name__)
+            app.register_blueprint(create_smart_search_blueprint(Mock(), Mock()))
+        client = app.test_client()
+        for origin in ("https://unrelated.example", "https://www.lotuselectronics.com.evil.example", "null", None):
+            response = client.options("/smart/search", headers={"Origin": origin} if origin else {})
+            self.assertNotIn("Access-Control-Allow-Origin", response.headers)
+            self.assertNotIn("Access-Control-Allow-Headers", response.headers)
+            self.assertIn("Origin", response.vary)
+        response = client.options("/smart/search", headers={"Origin": "https://www.lotuselectronics.com"})
+        self.assertEqual(response.headers["Access-Control-Allow-Origin"], "https://www.lotuselectronics.com")
+
+    def test_cors_origin_configuration_replaces_defaults(self):
+        for setting, allowed in ((" https://staging.example , http://localhost:4200 ", True), ("", False), ("*", True)):
+            with self.subTest(setting=setting), patch.dict(os.environ, {"SMART_SEARCH_CORS_ORIGINS": setting}):
+                app = Flask(__name__)
+                app.register_blueprint(create_smart_search_blueprint(Mock(), Mock()))
+                client = app.test_client()
+                for origin in ("https://staging.example", "http://localhost:4200"):
+                    response = client.options("/smart/search", headers={"Origin": origin})
+                    self.assertEqual("Access-Control-Allow-Origin" in response.headers, allowed)
+                response = client.options("/smart/search", headers={"Origin": "https://www.lotuselectronics.com"})
+                self.assertEqual("Access-Control-Allow-Origin" in response.headers, setting == "*")
 
     def test_validation(self):
         for body in [[], {}, {"query": "x"}, {"query": "x"*301}, {"query": "fridge", "page": True},

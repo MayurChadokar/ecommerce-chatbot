@@ -191,6 +191,12 @@ store offers are not mixed with old snapshot pricing fields. Conditional store
 offers never become the online selling price. Price and stock are checked on
 each request; no price/stock cache has been introduced.
 
+Discovery excludes products whose current API stock is `No`; the verification
+metadata includes `out_of_stock_count`. Verified list MRP is returned both as
+`mrp` and the storefront-compatible `product_msrp`. Product links and `uri_slug`
+use the current API category/product path when supplied. Failed live checks
+continue to use labelled, unverified catalogue fallbacks.
+
 On API failure, search returns real Pinecone catalogue names, images, links and
 features, with a last-known catalogue price when present. These cards carry
 `catalogue_fallback: true`, `catalogue_price` and `price_verified: false`; their

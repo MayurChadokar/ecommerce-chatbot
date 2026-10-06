@@ -49,10 +49,13 @@ def product_url(slug, product_id):
                 and parsed.path.startswith("/product/")):
             return slug
         return ""
-    if any(char in slug for char in "/\\?#"):
+    # The live API includes the category prefix, e.g. "iphones/real-phone".
+    # Preserve those path segments without permitting traversal or URL syntax.
+    if (any(char in slug for char in "\\?#:")
+            or any(part in {"", ".", ".."} for part in slug.split("/"))):
         return ""
     return "https://www.lotuselectronics.com/product/{}/{}".format(
-        quote(slug, safe="-"), quote(pid, safe=""))
+        quote(slug, safe="-/"), quote(pid, safe=""))
 
 
 def connect_index(config):
