@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from langchain_core.tools import tool
 
 from product_availability import availability_fields
+from product_index import product_url
 from product_pricing import pricing_fields
 
 
@@ -49,8 +50,9 @@ def fetch_live_details(product_id: int, city: str = "INDORE") -> Dict[str, Any]:
         return {
             **{key: detail.get(key) for key in (
                 "product_id", "product_name", "uri_slug", "product_sku",
-                "product_mrp", "product_specification", "meta_desc", "del",
+                "product_mrp", "product_msrp", "product_specification", "meta_desc", "del",
             )},
+            "product_url": product_url(detail.get("uri_slug"), product_id),
             "product_image": image,
             "source": "live_api",
             "checked_at": datetime.now(timezone.utc).isoformat(),
