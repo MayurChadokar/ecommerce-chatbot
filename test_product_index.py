@@ -106,6 +106,10 @@ class ConfigAndVectorTests(unittest.TestCase):
         self.assertEqual(product_url("javascript:bad/slug", "7"), "")
         self.assertEqual(product_url("https://attacker.example/product/p/7", "7"), "")
         self.assertEqual(product_url("", "7"), "")
+        self.assertEqual(product_url("iphones/real-phone", "7"),
+                         "https://www.lotuselectronics.com/product/iphones/real-phone/7")
+        for slug in ("../phone", "iphones/../phone", "/iphones/phone", "iphones//phone", "iphones/phone?x=1"):
+            self.assertEqual(product_url(slug, "7"), "")
 
     def test_integrated_model_is_rejected_even_with_same_dimension(self):
         desc = SimpleNamespace(host="https://test.svc.pinecone.io", dimension=384,

@@ -277,7 +277,8 @@ TOOL USAGE RULES:
 1. Use search_products ONLY when user asks for NEW products they haven't seen yet
 2. Use get_near_store ONLY when user asks about store locations by city or zipcode
 3. Use get_filtered_product_details_tool ONLY when the user wants MORE DETAILS about
-   ONE specific product from previous results (extract product_id from context). NEVER
+   ONE specific product. Use a product_id provided by the user or from previous results;
+   if no ID can be resolved, ask which product instead of inventing details. NEVER
    use it to gather specs for a comparison — use compare_products for that instead.
 4. Use search_terms_conditions when user asks about:
    - Return policy ("return", "return it", "want to return")
@@ -1155,19 +1156,51 @@ def _run_agent(message: str, session_id: str = "default_session", *, actions=Non
         return json.dumps(error_response, ensure_ascii=False, indent=2)
 
 
-def chat_with_agent(message: str, session_id: str = "default_session") -> str:
-    """Public entry point: run the agent and persist the assistant reply.
+def chat_with_agent(message: str, session_id: str = "default_session", *,
+                    product_id: int = None, city: str = "INDORE") -> str:
+    """Resolve card selections directly, or run the agent, and persist the reply.
 
     Wraps `_run_agent` so every turn's assistant answer is logged to SQLite for
     the admin portal. Logging failures never affect the returned response.
     """
     actions = {}
-    response = _run_agent(message, session_id, actions=actions)
+    if product_id is None:
+        response = _run_agent(message, session_id, actions=actions)
+    else:
+        # Ask-about is a fixed detail action. Preserve all API fields without
+        # relying on model tool selection, model rendering, or Redis history.
+        try:
+            store.log_message(session_id, "user", message)
+            from langchain_core.messages import HumanMessage
+            redis_memory.add_message_to_user(session_id, HumanMessage(content=message))
+        except Exception as log_err:
+            print(f"Failed to log product detail request: {log_err}")
+        try:
+            detail = get_filtered_product_details_tool.invoke({"product_id": product_id, "city": city})
+        except Exception as detail_error:
+            print(f"Product detail lookup failed: {type(detail_error).__name__}")
+            detail = {}
+        valid_detail = (isinstance(detail, dict) and not detail.get("error")
+                        and str(detail.get("product_id")) == str(product_id)
+                        and bool(detail.get("product_name")))
+        if valid_detail:
+            if detail.get("source") != "live_api" and not detail.get("catalogue_fallback"):
+                from live_product_enrichment import merge_live, live_card_fields
+                detail = merge_live(detail, None, city)
+                detail.update(live_card_fields(detail))
+            actions["live_products"] = {str(product_id): detail}
+        response = json.dumps({
+            "answer": ("Here are the details for your selected product." if valid_detail else
+                       "Product details could not be retrieved. Please try again in a moment."),
+            "products": [], "product_details": detail if valid_detail else {},
+            "stores": [], "recommendations": [],
+            "end": "Stock availability is specific to the selected city." if valid_detail else "",
+        }, ensure_ascii=False)
     try:
         parsed_response = json.loads(response)
         if isinstance(parsed_response, dict):
             from live_product_enrichment import enabled as live_enabled, normalize_live_response
-            if live_enabled():
+            if live_enabled() or product_id is not None:
                 parsed_response = normalize_live_response(parsed_response, actions.get("live_products", {}))
             response = json.dumps(normalize_bulk_response(
                 parsed_response, actions.get("bulk_enquiry", {})), ensure_ascii=False)
@@ -1189,7 +1222,7 @@ def chat_with_agent(message: str, session_id: str = "default_session") -> str:
         if draft.get("draft_id") and message_id:
             store.mark_bulk_draft_shown(session_id, draft["draft_id"], message_id)
     except Exception as log_err:
-        print(f"⚠️  Failed to log assistant message: {log_err}")
+        print(f"Failed to log assistant message: {log_err}")
     return response
 
 

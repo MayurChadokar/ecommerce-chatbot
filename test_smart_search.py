@@ -217,6 +217,23 @@ class SmartTests(unittest.TestCase):
         self.assertNotIn("price", self.catalogue.index.query.call_args.kwargs["filter"])
         self.assertEqual(result["products"][0]["brand"], "Samsung")
 
+    def test_storefront_mrp_and_link_use_current_api_fields(self):
+        self.fetch.side_effect = lambda pid, city: {
+            **detail(pid, city), "mrp": 50000, "uri_slug": "refrigerators/current-fridge"}
+        product = self.search.search("Samsung fridge")["products"][0]
+        self.assertEqual(product["product_msrp"], 50000)
+        self.assertEqual(product["product_url"], "https://www.lotuselectronics.com/product/refrigerators/current-fridge/1")
+        self.assertEqual(product["uri_slug"], "refrigerators/current-fridge")
+
+    def test_sold_out_matches_are_not_returned_as_shopping_options(self):
+        self.fetch.side_effect = lambda pid, city: {
+            **detail(pid, city), **availability_fields("No", live=True, city=city)}
+        result = self.search.search("Samsung fridge")
+        self.assertEqual(result["products"], [])
+        self.assertEqual(result["verification"]["outOfStockCount"], 1)
+        self.assertTrue(result["verification"]["complete"])
+        self.assertIn("out of stock", result["message"])
+
     def test_strict_budget_excludes_even_one_rupee_over(self):
         self.fetch.side_effect = lambda pid, city: detail(pid, city, 40001)
         result = self.search.search("Samsung fridge under 40k")

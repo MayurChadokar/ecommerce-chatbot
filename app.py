@@ -88,14 +88,29 @@ def health():
 @app.route("/chat", methods=["POST"])
 def chat():
     payload = request.get_json(force=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Request must be a JSON object"}), 400
     message = payload.get("message")
     session_id = payload.get("session_id", "default_session")
     
     if not message:
         return jsonify({"error": "Missing 'message' in request"}), 400
 
+    # Product-card selections carry identity separately from the display name.
+    selection = {}
+    if "product_id" in payload:
+        product_id = payload["product_id"]
+        if (type(product_id) not in (int, str) or
+                not str(product_id).isascii() or not str(product_id).isdigit() or
+                len(str(product_id)) > 19 or not 0 < int(product_id) <= 2**63 - 1):
+            return jsonify({"error": "product_id must be a positive integer"}), 400
+        city = payload.get("city", "INDORE")
+        if not isinstance(city, str) or not city.strip() or len(city) > 100:
+            return jsonify({"error": "city must be a non-empty string of at most 100 characters"}), 400
+        selection = {"product_id": int(product_id), "city": city.strip().upper()}
+
     try:
-        ai_reply = chat_with_agent(message, session_id)
+        ai_reply = chat_with_agent(message, session_id, **selection)
         data = json.loads(ai_reply)
         
         response = {

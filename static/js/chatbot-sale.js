@@ -87,7 +87,7 @@ class ChatBot {
         document.body.style.overflow = '';
     }
 
-    sendMessage() {
+    sendMessage(selection = null) {
         const message = this.messageInput.value.trim();
         if (!message) return;
 
@@ -112,7 +112,7 @@ class ChatBot {
         }
 
         this.lastUserMessage = message;
-        this.generateBotResponse(message);
+        this.generateBotResponse(message, 0, selection);
     }
 
     hideQuickActions() {
@@ -251,7 +251,11 @@ class ChatBot {
         cardDiv.querySelector('.product-result-ask').addEventListener('click', () => {
             if (this.isTyping || this.awaitingPhone || this.awaitingOTP) return;
             this.messageInput.value = `Show me the details and specifications for ${name}`;
-            this.sendMessage();
+            const id = String(product.product_id ?? '');
+            const selection = /^\d+$/.test(id) && Number.isSafeInteger(Number(id)) && Number(id) > 0
+                ? { product_id: String(Number(id)), city: text(product.stock_city) || 'INDORE' }
+                : null;
+            this.sendMessage(selection);
         });
         this.chatMessages.appendChild(cardDiv);
         this.scrollToBottom();
@@ -267,29 +271,38 @@ class ChatBot {
         if (!productDetails.product_name && !productDetails.product_id) {
             return; // Don't show card without basic product info
         }
-        if (productDetails.catalogue_fallback) {
-            this.addProductCard(productDetails);
-            return;
-        }
-        
         const cardDiv = document.createElement('div');
         cardDiv.className = 'product-details-card fade-in';
         
         const product = productDetails;
-        const productName = product.product_name || 'Product Details';
+        const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[char]));
+        const safeUrl = value => {
+            if (typeof value !== 'string' || !value.trim()) return '';
+            try {
+                const url = new URL(value, window.location.origin);
+                return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+            } catch { return ''; }
+        };
+        const productName = escape(product.product_name || 'Product Details');
         const pricingHtml = this.renderProductPricing(product);
-        const imageUrl = product.product_image || '';
-        const inStock = product.instock || 'Unknown';
-        const description = product.meta_desc || '';
+        const imageUrl = escape(safeUrl(product.product_image));
+        const productLink = safeUrl(product.product_url);
+        const inStock = String(product.instock || 'Unknown').trim().toLowerCase();
+        const stockLabel = inStock === 'yes' ? 'In Stock' : inStock === 'no' ? 'Out of Stock' : 'Availability unconfirmed';
+        const stockClass = inStock === 'yes' ? 'bg-success' : inStock === 'no' ? 'bg-danger' : 'bg-warning';
+        const stockIcon = inStock === 'yes' ? 'check' : inStock === 'no' ? 'times' : 'clock';
+        const description = typeof product.meta_desc === 'string' ? product.meta_desc : '';
         
         // Handle specifications - show top 5 specs and prioritize warranty
         let specificationsHtml = '';
         if (product.product_specification && Array.isArray(product.product_specification)) {
-            let specs = [...product.product_specification];
+            let specs = product.product_specification.filter(spec => spec && spec.fkey && spec.fvalue != null);
             
             // Look for warranty in specs and prioritize it
             const warrantyIndex = specs.findIndex(spec => 
-                spec.fkey && spec.fkey.toLowerCase().includes('warranty')
+                String(spec.fkey).toLowerCase().includes('warranty')
             );
             
             if (warrantyIndex !== -1) {
@@ -300,6 +313,11 @@ class ChatBot {
             
             // Take only top 5 specifications
             const topSpecs = specs.slice(0, 5);
+            const specRows = rows => rows.map(spec => `
+                <div class="col-12 mb-1">
+                    <small class="text-muted">${escape(spec.fkey)}:</small>
+                    <span class="fw-bold ms-1">${escape(spec.fvalue)}</span>
+                </div>`).join('');
             
             specificationsHtml = `
                 <div class="specifications mb-3">
@@ -307,13 +325,12 @@ class ChatBot {
                         <i class="fas fa-list-check me-1"></i>Key Specifications
                     </h6>
                     <div class="row">
-                        ${topSpecs.map(spec => `
-                            <div class="col-12 mb-1">
-                                <small class="text-muted">${spec.fkey}:</small>
-                                <span class="fw-bold ms-1">${spec.fvalue}</span>
-                            </div>
-                        `).join('')}
+                        ${specRows(topSpecs)}
                     </div>
+                    ${specs.length > 5 ? `<details class="mt-2">
+                        <summary>More specifications (${specs.length - 5})</summary>
+                        <div class="row mt-2">${specRows(specs.slice(5))}</div>
+                    </details>` : ''}
                 </div>
             `;
         }
@@ -326,9 +343,9 @@ class ChatBot {
                     <h6 class="text-success mb-2">
                         <i class="fas fa-truck me-1"></i>Delivery Options
                     </h6>
-                    ${product.del.std ? `<p class="mb-1"><i class="fas fa-box me-1 text-info"></i><small>${product.del.std}</small></p>` : ''}
-                    ${product.del.t3h ? `<p class="mb-1"><i class="fas fa-bolt me-1 text-warning"></i><small>${product.del.t3h}</small></p>` : ''}
-                    ${product.del.stp ? `<p class="mb-1"><i class="fas fa-store me-1 text-primary"></i><small>${product.del.stp}</small></p>` : ''}
+                    ${product.del.std ? `<p class="mb-1"><i class="fas fa-box me-1 text-info"></i><small>${escape(product.del.std)}</small></p>` : ''}
+                    ${product.del.t3h ? `<p class="mb-1"><i class="fas fa-bolt me-1 text-warning"></i><small>${escape(product.del.t3h)}</small></p>` : ''}
+                    ${product.del.stp ? `<p class="mb-1"><i class="fas fa-store me-1 text-primary"></i><small>${escape(product.del.stp)}</small></p>` : ''}
                 </div>
             `;
         }
@@ -345,10 +362,11 @@ class ChatBot {
                         <div class="col-md-4 text-center mb-3">
                             <img src="${imageUrl}" alt="${productName}" class="img-fluid rounded shadow-sm" style="max-height: 200px;" onerror="this.style.display='none'" />
                             <div class="mt-2">
-                                <span class="badge ${inStock.toLowerCase() === 'yes' ? 'bg-success' : 'bg-warning'} px-3">
-                                    <i class="fas fa-${inStock.toLowerCase() === 'yes' ? 'check' : 'clock'} me-1"></i>
-                                    ${inStock.toLowerCase() === 'yes' ? 'In Stock' : 'Check Availability'}
+                                <span class="badge ${stockClass} px-3">
+                                    <i class="fas fa-${stockIcon} me-1"></i>
+                                    ${stockLabel}
                                 </span>
+                                ${product.stock_city ? `<small class="d-block text-muted mt-1">Stock in ${escape(product.stock_city)}</small>` : ''}
                             </div>
                         </div>
                         <div class="col-md-8">
@@ -363,14 +381,14 @@ class ChatBot {
                                     <h6 class="text-secondary mb-2">
                                         <i class="fas fa-file-alt me-1"></i>Description
                                     </h6>
-                                    <p class="text-muted small">${description.length > 150 ? description.substring(0, 150) + '...' : description}</p>
+                                    <p class="text-muted small">${escape(description.length > 150 ? description.substring(0, 150) + '...' : description)}</p>
                                 </div>
                             ` : ''}
                             
                             <div class="action-buttons">
-                                <button class="btn btn-primary me-2" onclick="window.open('https://www.lotuselectronics.com/product/${product.uri_slug || ''}/${product.product_id || ''}', '_blank')">
-                                    <i class="fas fa-shopping-cart me-1"></i>Buy Now
-                                </button>
+                                ${productLink ? `<a class="btn btn-primary me-2" href="${escape(productLink)}" target="_blank" rel="noopener noreferrer">
+                                    <i class="fas fa-external-link-alt me-1"></i>View product
+                                </a>` : ''}
                                 <button class="btn btn-outline-success" onclick="window.open('tel:0731-4265577', '_self')">
                                     <i class="fas fa-phone me-1"></i>Call for Details
                                 </button>
@@ -818,7 +836,7 @@ class ChatBot {
         this.showVerificationNotice(responseData);
     }
 
-    generateBotResponse(userMessage, retryCount = 0) {
+    generateBotResponse(userMessage, retryCount = 0, selection = null) {
         this.showTypingIndicator();
 
         const requestOptions = {
@@ -831,7 +849,8 @@ class ChatBot {
             mode: 'cors',
             body: JSON.stringify({
                 message: userMessage,
-                session_id: this.sessionId
+                session_id: this.sessionId,
+                ...(selection || {})
             })
         };
 
@@ -927,7 +946,7 @@ class ChatBot {
                     // Show retry message and attempt again after delay
                     this.addMessage("Connection issue detected. Retrying in a moment...", 'bot');
                     setTimeout(() => {
-                        this.generateBotResponse(userMessage, retryCount + 1);
+                        this.generateBotResponse(userMessage, retryCount + 1, selection);
                     }, (retryCount + 1) * 2000); // Exponential backoff: 2s, 4s
                     return;
                 }
