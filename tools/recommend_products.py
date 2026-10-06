@@ -61,7 +61,15 @@ def recommend_products_tool(
             return response
         products = response["products"]
         if in_stock_only:
-            products = [p for p in products if p.get("stock_verified") and p.get("availability_status") == "in_stock"]
+            catalogue = [p for p in products if p.get("catalogue_fallback")
+                         and p.get("availability_status") != "out_of_stock"]
+            products = [p for p in products if p.get("stock_verified") and p.get("availability_status") == "in_stock"
+                        and not p.get("catalogue_fallback")]
+            if catalogue and len(products) < 5:
+                return {"products": products[:5], "catalogue_products": catalogue[:max(0, 5 - len(products))],
+                        "verification_notice": response.get("verification_notice"),
+                        "live_verification": response.get("live_verification", {}),
+                        "message": "Catalogue alternatives are not confirmed in-stock recommendations. Verify them using View product."}
         if products:
             return products[:5]
         unknown = response.get("live_verification", {}).get("stock_unverified_count", 0)

@@ -21,7 +21,7 @@ graceful_timeout = 30
 
 # Logging
 accesslog = "logs/access.log"
-errorlog = "logs/error.log"
+errorlog = "logs/error.log" 
 loglevel = "info"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
 
@@ -35,8 +35,8 @@ user = None
 group = None
 
 # Security
-limit_request_line = 4094
-limit_request_fields = 100
+limit_request_line = 4094   
+limit_request_fields = 100  
 limit_request_field_size = 8190
 
 # Performance tuning for Flask
@@ -58,6 +58,6 @@ def post_fork(server, worker):
 
 def post_worker_init(worker):
     worker.log.info("Worker initialized (pid: %s)", worker.pid)
-
+    
 def worker_abort(worker):
     worker.log.info("Worker received SIGABRT signal")

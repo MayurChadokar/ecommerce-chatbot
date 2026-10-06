@@ -158,6 +158,14 @@ class ChatBot {
         const money = value => new Intl.NumberFormat('en-IN', {
             style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2
         }).format(value);
+        const cataloguePrice = parsePrice(product.catalogue_price);
+        if (product.price_verified === false && cataloguePrice !== null) {
+            return `<div class="product-pricing product-pricing-catalogue">
+                <span class="price-label">Last-known catalogue price</span>
+                <strong class="price-amount">${money(cataloguePrice)}</strong>
+                <p class="price-note">Current price not verified. Confirm on the product page.</p>
+            </div>`;
+        }
         const mrp = firstPrice([product.mrp, product.product_msrp]);
         const selling = firstPrice([product.selling_price, product.product_selling_price, product.sale_price, product.product_mrp]);
         const legacy = firstPrice([product.price]);
@@ -229,6 +237,7 @@ class ChatBot {
                     </div>
                 </div>
                 ${this.renderProductPricing(product)}
+                ${product.catalogue_fallback ? '<p class="product-verification-note">Verify live price &amp; stock using View product.</p>' : ''}
                 <div class="product-result-actions">
                     ${productLink ? `<a href="${escape(productLink)}" target="_blank" rel="noopener noreferrer" class="product-result-view" aria-label="View ${escape(name)} on Lotus Electronics (opens in a new tab)">View product <i class="fas fa-arrow-up-right-from-square" aria-hidden="true"></i></a>` : ''}
                     <button type="button" class="product-result-ask" aria-label="Ask about ${escape(name)}"><i class="far fa-comment-dots" aria-hidden="true"></i> Ask about this</button>
@@ -257,6 +266,10 @@ class ChatBot {
         // Check if it has essential product information
         if (!productDetails.product_name && !productDetails.product_id) {
             return; // Don't show card without basic product info
+        }
+        if (productDetails.catalogue_fallback) {
+            this.addProductCard(productDetails);
+            return;
         }
         
         const cardDiv = document.createElement('div');
@@ -690,6 +703,28 @@ class ChatBot {
     // }
 
 
+    showVerificationNotice(responseData) {
+        const list = value => Array.isArray(value) ? value : [];
+        const details = responseData.product_details;
+        const products = [...list(responseData.products), ...list(responseData.recommendations),
+            ...(Array.isArray(details) ? details : details && typeof details === 'object' ? [details] : [])];
+        if (!products.some(product => product && product.catalogue_fallback)) return;
+        if (!this.verificationDialog) {
+            const dialog = document.createElement('dialog');
+            dialog.className = 'verification-dialog';
+            dialog.setAttribute('aria-labelledby', 'verification-dialog-title');
+            dialog.setAttribute('aria-describedby', 'verification-dialog-message');
+            dialog.innerHTML = `<span class="verification-dialog-icon" aria-hidden="true">!</span>
+                <h2 id="verification-dialog-title">Verify live price &amp; stock</h2>
+                <p id="verification-dialog-message">Live price or stock could not be verified for some products. Catalogue prices are last-known and may change. Use <strong>View product</strong> to confirm the current price and availability before buying.</p>
+                <button type="button" class="verification-dialog-dismiss" autofocus>Got it</button>`;
+            dialog.querySelector('button').addEventListener('click', () => dialog.close());
+            document.body.appendChild(dialog);
+            this.verificationDialog = dialog;
+        }
+        if (!this.verificationDialog.open) this.verificationDialog.showModal();
+    }
+
     processStructuredResponse(responseData) {
         let answer = responseData.answer;
         const products = responseData.products;
@@ -780,6 +815,7 @@ class ChatBot {
             this.addBulkEnquiryCard(bulkEnquiry);
         }
         if (end) this.addMessage(end, 'bot');
+        this.showVerificationNotice(responseData);
     }
 
     generateBotResponse(userMessage, retryCount = 0) {

@@ -8,6 +8,7 @@ def create_smart_search_blueprint(catalogue, ai_client):
     service = SmartSearch(catalogue, ai_client)
 
     @api.post("/api/search/smart")
+    @api.post("/smart/search")
     def search():
         if request.content_length and request.content_length > 8192:
             return jsonify(status="error", error="Request body too large"), 413

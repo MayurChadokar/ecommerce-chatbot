@@ -9,6 +9,30 @@ def message_text(content):
     return str(content or "")
 
 
+def empty_product_search_response(results):
+    """An empty search proves no match, never a product's release status."""
+    if not results or any(result.get("tool") != "search_products" for result in results):
+        return None
+    queries = []
+    for result in results:
+        try:
+            payload = json.loads(result["result"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if (not isinstance(payload, dict) or payload.get("error")
+                or payload.get("error_code") or payload.get("products") != []):
+            return None
+        if payload.get("search_query"):
+            queries.append(str(payload["search_query"]))
+    subject = f' for "{queries[0]}"' if len(queries) == 1 else " for these preferences"
+    return {
+        "answer": f"I couldn't find matching products{subject} among the catalogue records checked.",
+        "products": [], "product_details": {}, "stores": [], "policy_info": {},
+        "comparison": [], "recommendations": [], "order": {}, "ticket": {}, "bulk_enquiry": {},
+        "end": "Would you like to try another model or change the search filters?",
+    }
+
+
 def build_chat_context(rows, cached_messages=()):
     # Recover structured cards from the old Redis cache for pre-migration rows.
     # A cached response must match the assistant text actually logged to SQLite.

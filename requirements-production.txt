@@ -1,0 +1,21 @@
+# Python 3.12 / Ubuntu 24.04. Runtime versions match the working local environment.
+# Install the CPU build of torch first; see the deployment commands.
+# Policy vector search stays disabled; its optional TextBlob dependency is omitted.
+flask==3.1.3
+python-dotenv==1.2.3
+redis==8.1.0
+langchain==1.4.2
+langchain-core==1.6.5
+langchain-google-genai==4.4.0
+langgraph==1.2.12
+sentence-transformers==6.1.0
+pinecone==9.1.0
+transformers==5.17.0
+torch==2.14.0
+geopy==2.5.0
+requests==2.34.2
+pydantic==2.13.5
+typing-extensions==4.16.0
+tqdm==4.70.1
+numpy==2.5.3
+gunicorn==26.2.0

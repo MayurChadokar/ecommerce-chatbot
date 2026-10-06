@@ -10,7 +10,7 @@ from langchain_core.tools import tool
 from product_index import EMBEDDING_MODEL, IndexSettings, connect_index, product_url
 from product_pricing import pricing_fields
 from product_availability import availability_fields
-from live_product_enrichment import enabled as live_enabled, enrich, live_card_fields
+from live_product_enrichment import enabled as live_enabled, enrich, live_card_fields, VERIFICATION_NOTICE
 
 logger = logging.getLogger(__name__)
 
@@ -94,13 +94,22 @@ class ProductSearchTool:
             record for record in records
             if "iphone" in str(record.get("product_name", "")).lower()
         ]
-        generation = re.search(r"\biphone\s*(\d{1,2})\b", normalized_query)
-        if generation:
-            requested = generation.group(1)
+        # Catalogue titles include "iPhone Mobile 18 Pro" as well as the
+        # customer's usual "iPhone 18 Pro" spelling. Match their model identity
+        # rather than requiring those words to be adjacent in the title.
+        model_pattern = r"\biphone\s*(?:mobile\s+)?(\d{1,2})(?:\s*(pro\s+max|pro|plus|mini|air|e))?\b"
+        requested = re.search(model_pattern, normalized_query)
+        if requested:
+            def matches_model(record):
+                model = re.search(model_pattern, str(record.get("product_name", "")).lower())
+                return bool(model and model.group(1) == requested.group(1)
+                            and (not requested.group(2)
+                                 or re.sub(r"\s+", " ", model.group(2) or "")
+                                 == re.sub(r"\s+", " ", requested.group(2))))
+
             iphone_records = [
                 record for record in iphone_records
-                if re.search(rf"\biphone\s*{re.escape(requested)}\b",
-                             str(record.get("product_name", "")).lower())
+                if matches_model(record)
             ]
         return iphone_records
 
@@ -183,6 +192,8 @@ class ProductSearchTool:
         if hasattr(results, "verification"):
             response["source"] = "pinecone_with_live_verification"
             response["live_verification"] = results.verification
+            if any(p.get("catalogue_fallback") for p in products):
+                response["verification_notice"] = dict(VERIFICATION_NOTICE)
             if results.verification_error:
                 response["error"] = results.verification_error
                 response["error_code"] = "price_unverified"

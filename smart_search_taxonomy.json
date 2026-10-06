@@ -1,6 +1,6 @@
 {
   "namespace": "lotus-products-sql-20260928",
-  "version": "823dce647fb8aac5a13af66960160ec40d669cdad3a2eebd7a9008fca9c770b3",
+  "version": "73f7d0649d61da8dfd679e101dc652553c0853d4127ee0eddd794ea80c788142",
   "brands": [
     "Acer",
     "Amazfit",
@@ -996,5 +996,1477 @@
       "Smart Speaker",
       "Sound Bar"
     ]
-  }
+  },
+  "categoryTree": [
+    {
+      "id": "15",
+      "name": "Audio & Video Entertainment",
+      "parentId": "0",
+      "active": true
+    },
+    {
+      "id": "19",
+      "name": "Television",
+      "parentId": "0",
+      "active": true
+    },
+    {
+      "id": "21",
+      "name": "Full HD LED TV",
+      "parentId": "19",
+      "active": true
+    },
+    {
+      "id": "22",
+      "name": "HD LED TV",
+      "parentId": "19",
+      "active": true
+    },
+    {
+      "id": "23",
+      "name": "4K Ultra HD TV",
+      "parentId": "19",
+      "active": true
+    },
+    {
+      "id": "24",
+      "name": "Home Theatre",
+      "parentId": "15",
+      "active": true
+    },
+    {
+      "id": "25",
+      "name": "3D Blu Ray",
+      "parentId": "24",
+      "active": false
+    },
+    {
+      "id": "26",
+      "name": "DVD Home Theatre",
+      "parentId": "24",
+      "active": false
+    },
+    {
+      "id": "27",
+      "name": "Sound Bar",
+      "parentId": "15",
+      "active": true
+    },
+    {
+      "id": "28",
+      "name": "DVD Player",
+      "parentId": "15",
+      "active": false
+    },
+    {
+      "id": "29",
+      "name": "DVD",
+      "parentId": "28",
+      "active": true
+    },
+    {
+      "id": "30",
+      "name": "Blu Ray",
+      "parentId": "28",
+      "active": true
+    },
+    {
+      "id": "31",
+      "name": "Speakers",
+      "parentId": "15",
+      "active": true
+    },
+    {
+      "id": "32",
+      "name": "Smartphones & Wearable",
+      "parentId": "0",
+      "active": true
+    },
+    {
+      "id": "33",
+      "name": "Mobiles",
+      "parentId": "32",
+      "active": true
+    },
+    {
+      "id": "34",
+      "name": "Android",
+      "parentId": "33",
+      "active": true
+    },
+    {
+      "id": "35",
+      "name": "Tizen",
+      "parentId": "33",
+      "active": false
+    },
+    {
+      "id": "36",
+      "name": "Android Smartphone",
+      "parentId": "33",
+      "active": true
+    },
+    {
+      "id": "37",
+      "name": "iPhone Mobile",
+      "parentId": "33",
+      "active": true
+    },
+    {
+      "id": "38",
+      "name": "Blackberry",
+      "parentId": "33",
+      "active": false
+    },
+    {
+      "id": "39",
+      "name": "Feature Mobile Phone",
+      "parentId": "33",
+      "active": true
+    },
+    {
+      "id": "40",
+      "name": "Landline Phones",
+      "parentId": "270",
+      "active": true
+    },
+    {
+      "id": "41",
+      "name": "Cordless Phones",
+      "parentId": "270",
+      "active": true
+    },
+    {
+      "id": "42",
+      "name": "Mobile Accessories",
+      "parentId": "32",
+      "active": true
+    },
+    {
+      "id": "43",
+      "name": "Headphone",
+      "parentId": "208",
+      "active": true
+    },
+    {
+      "id": "44",
+      "name": "Earphone",
+      "parentId": "208",
+      "active": true
+    },
+    {
+      "id": "46",
+      "name": "Mobile Covers",
+      "parentId": "42",
+      "active": false
+    },
+    {
+      "id": "47",
+      "name": "SD Memory Card",
+      "parentId": "42",
+      "active": false
+    },
+    {
+      "id": "48",
+      "name": "Bluetooth",
+      "parentId": "42",
+      "active": false
+    },
+    {
+      "id": "49",
+      "name": "Power Bank",
+      "parentId": "42",
+      "active": false
+    },
+    {
+      "id": "50",
+      "name": "Cameras",
+      "parentId": "0",
+      "active": true
+    },
+    {
+      "id": "51",
+      "name": "Professional Camera",
+      "parentId": "50",
+      "active": false
+    },
+    {
+      "id": "52",
+      "name": "Digital DSLR Camera",
+      "parentId": "50",
+      "active": true
+    },
+    {
+      "id": "53",
+      "name": "Camcorder Handycam",
+      "parentId": "50",
+      "active": false
+    },
+    {
+      "id": "56",
+      "name": "Tripods",
+      "parentId": "169",
+      "active": false
+    },
+    {
+      "id": "57",
+      "name": "Memory Cards",
+      "parentId": "169",
+      "active": false
+    },
+    {
+      "id": "58",
+      "name": "Home Appliances",
+      "parentId": "0",
+      "active": true
+    },
+    {
+      "id": "59",
+      "name": "Refrigerators",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "60",
+      "name": "Single Door Refrigerator",
+      "parentId": "59",
+      "active": true
+    },
+    {
+      "id": "61",
+      "name": "Double Door Refrigerator",
+      "parentId": "59",
+      "active": true
+    },
+    {
+      "id": "62",
+      "name": "Side By Side Refrigerator",
+      "parentId": "59",
+      "active": true
+    },
+    {
+      "id": "63",
+      "name": "Air Conditioners",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "64",
+      "name": "Split AC",
+      "parentId": "63",
+      "active": false
+    },
+    {
+      "id": "65",
+      "name": "Window AC",
+      "parentId": "63",
+      "active": true
+    },
+    {
+      "id": "66",
+      "name": "Washing Machines",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "67",
+      "name": "Semi Automatic Washing Machine",
+      "parentId": "66",
+      "active": true
+    },
+    {
+      "id": "68",
+      "name": "Front Load Washing Machine",
+      "parentId": "66",
+      "active": true
+    },
+    {
+      "id": "69",
+      "name": "Top Load Washing Machine",
+      "parentId": "66",
+      "active": true
+    },
+    {
+      "id": "70",
+      "name": "Fans",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "71",
+      "name": "Ceiling Fan",
+      "parentId": "70",
+      "active": true
+    },
+    {
+      "id": "72",
+      "name": "Exhaust Fan",
+      "parentId": "70",
+      "active": true
+    },
+    {
+      "id": "73",
+      "name": "Table Fan",
+      "parentId": "70",
+      "active": true
+    },
+    {
+      "id": "74",
+      "name": "Coolers",
+      "parentId": "58",
+      "active": false
+    },
+    {
+      "id": "75",
+      "name": "Water Heaters",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "77",
+      "name": "Room Heaters",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "78",
+      "name": "Vacuum Cleaner",
+      "parentId": "210",
+      "active": true
+    },
+    {
+      "id": "79",
+      "name": "Irons",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "80",
+      "name": "Steam Irons",
+      "parentId": "79",
+      "active": true
+    },
+    {
+      "id": "81",
+      "name": "Dry Irons",
+      "parentId": "79",
+      "active": true
+    },
+    {
+      "id": "82",
+      "name": "Personal Care",
+      "parentId": "0",
+      "active": true
+    },
+    {
+      "id": "83",
+      "name": "Hair Dryer",
+      "parentId": "283",
+      "active": true
+    },
+    {
+      "id": "84",
+      "name": "Hair Styler",
+      "parentId": "283",
+      "active": true
+    },
+    {
+      "id": "85",
+      "name": "Beard Trimmer",
+      "parentId": "212",
+      "active": true
+    },
+    {
+      "id": "86",
+      "name": "Shavers",
+      "parentId": "82",
+      "active": false
+    },
+    {
+      "id": "87",
+      "name": "Grooming Kit",
+      "parentId": "212",
+      "active": true
+    },
+    {
+      "id": "88",
+      "name": "Female shavers & Epilators",
+      "parentId": "213",
+      "active": true
+    },
+    {
+      "id": "89",
+      "name": "Sewing Machines",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "90",
+      "name": "Electronic Safe",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "91",
+      "name": "Kitchen Appliances",
+      "parentId": "0",
+      "active": true
+    },
+    {
+      "id": "92",
+      "name": "Food Preparation",
+      "parentId": "91",
+      "active": false
+    },
+    {
+      "id": "93",
+      "name": "Food Processor",
+      "parentId": "92",
+      "active": true
+    },
+    {
+      "id": "94",
+      "name": "Mixer Grinder",
+      "parentId": "96",
+      "active": true
+    },
+    {
+      "id": "95",
+      "name": "Juicer Mixer",
+      "parentId": "96",
+      "active": true
+    },
+    {
+      "id": "96",
+      "name": "Juicer Mixer Grinder",
+      "parentId": "91",
+      "active": true
+    },
+    {
+      "id": "97",
+      "name": "Hand Blender",
+      "parentId": "92",
+      "active": true
+    },
+    {
+      "id": "98",
+      "name": "Microwave Oven",
+      "parentId": "91",
+      "active": true
+    },
+    {
+      "id": "99",
+      "name": "Solo Microwave Oven",
+      "parentId": "98",
+      "active": true
+    },
+    {
+      "id": "100",
+      "name": "Cooking Grill",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "101",
+      "name": "Convection",
+      "parentId": "98",
+      "active": false
+    },
+    {
+      "id": "102",
+      "name": "Cooking Appliances",
+      "parentId": "91",
+      "active": true
+    },
+    {
+      "id": "103",
+      "name": "Cooking Range",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "104",
+      "name": "Induction Cooker",
+      "parentId": "102",
+      "active": true
+    },
+    {
+      "id": "105",
+      "name": "Hob",
+      "parentId": "102",
+      "active": true
+    },
+    {
+      "id": "106",
+      "name": "Cooktops",
+      "parentId": "102",
+      "active": true
+    },
+    {
+      "id": "107",
+      "name": "Air Fryer",
+      "parentId": "102",
+      "active": true
+    },
+    {
+      "id": "108",
+      "name": "Vegetable & Fruit Purifier",
+      "parentId": "210",
+      "active": true
+    },
+    {
+      "id": "109",
+      "name": "Water Purifiers",
+      "parentId": "209",
+      "active": true
+    },
+    {
+      "id": "110",
+      "name": "Toasters & Grillers",
+      "parentId": "91",
+      "active": true
+    },
+    {
+      "id": "111",
+      "name": "Atta Makers",
+      "parentId": "91",
+      "active": true
+    },
+    {
+      "id": "112",
+      "name": "Coffee and Tea Makers",
+      "parentId": "211",
+      "active": true
+    },
+    {
+      "id": "113",
+      "name": "Electric Kettle",
+      "parentId": "211",
+      "active": true
+    },
+    {
+      "id": "114",
+      "name": "Gaming",
+      "parentId": "15",
+      "active": true
+    },
+    {
+      "id": "115",
+      "name": "Gaming Console",
+      "parentId": "114",
+      "active": true
+    },
+    {
+      "id": "118",
+      "name": "PS3",
+      "parentId": "115",
+      "active": false
+    },
+    {
+      "id": "119",
+      "name": "PS4",
+      "parentId": "115",
+      "active": false
+    },
+    {
+      "id": "120",
+      "name": "Gaming Software",
+      "parentId": "114",
+      "active": true
+    },
+    {
+      "id": "121",
+      "name": "Computers",
+      "parentId": "0",
+      "active": true
+    },
+    {
+      "id": "122",
+      "name": "Laptops",
+      "parentId": "121",
+      "active": true
+    },
+    {
+      "id": "123",
+      "name": "Tablets & I Pads",
+      "parentId": "32",
+      "active": true
+    },
+    {
+      "id": "124",
+      "name": "Desktop",
+      "parentId": "121",
+      "active": true
+    },
+    {
+      "id": "125",
+      "name": "Printers",
+      "parentId": "121",
+      "active": true
+    },
+    {
+      "id": "126",
+      "name": "Computer Accessories",
+      "parentId": "121,168",
+      "active": true
+    },
+    {
+      "id": "127",
+      "name": "Pendrives",
+      "parentId": "126",
+      "active": true
+    },
+    {
+      "id": "128",
+      "name": "Hard disc",
+      "parentId": "126",
+      "active": true
+    },
+    {
+      "id": "129",
+      "name": "Mouse",
+      "parentId": "126",
+      "active": true
+    },
+    {
+      "id": "131",
+      "name": "Keyboard",
+      "parentId": "126",
+      "active": true
+    },
+    {
+      "id": "132",
+      "name": "WiFi only",
+      "parentId": "123",
+      "active": false
+    },
+    {
+      "id": "133",
+      "name": "Wifi + 3G",
+      "parentId": "123",
+      "active": false
+    },
+    {
+      "id": "134",
+      "name": "WiFi + 3G + Voice",
+      "parentId": "123",
+      "active": false
+    },
+    {
+      "id": "135",
+      "name": "InkJet Printer",
+      "parentId": "125",
+      "active": true
+    },
+    {
+      "id": "136",
+      "name": "Laser Printer",
+      "parentId": "125",
+      "active": true
+    },
+    {
+      "id": "145",
+      "name": "PS3 Software",
+      "parentId": "120",
+      "active": false
+    },
+    {
+      "id": "146",
+      "name": "PS4 Software",
+      "parentId": "120",
+      "active": false
+    },
+    {
+      "id": "148",
+      "name": "Non Electric",
+      "parentId": "109",
+      "active": false
+    },
+    {
+      "id": "149",
+      "name": "Water Purifier RO",
+      "parentId": "109",
+      "active": true
+    },
+    {
+      "id": "150",
+      "name": "Water Purifier UV",
+      "parentId": "109",
+      "active": true
+    },
+    {
+      "id": "151",
+      "name": "Chimneys",
+      "parentId": "91",
+      "active": true
+    },
+    {
+      "id": "152",
+      "name": "Audio",
+      "parentId": "15",
+      "active": false
+    },
+    {
+      "id": "153",
+      "name": "Karaoke Mic",
+      "parentId": "31",
+      "active": true
+    },
+    {
+      "id": "154",
+      "name": "Bluetooth Speaker",
+      "parentId": "31",
+      "active": true
+    },
+    {
+      "id": "155",
+      "name": "Mitashi",
+      "parentId": "115",
+      "active": true
+    },
+    {
+      "id": "156",
+      "name": "Air Purifier",
+      "parentId": "210",
+      "active": true
+    },
+    {
+      "id": "157",
+      "name": "Portable Washing Machine",
+      "parentId": "66",
+      "active": true
+    },
+    {
+      "id": "158",
+      "name": "Dishwasher",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "159",
+      "name": "WiFi + 4G",
+      "parentId": "123",
+      "active": false
+    },
+    {
+      "id": "160",
+      "name": "Smart Band",
+      "parentId": "207",
+      "active": false
+    },
+    {
+      "id": "161",
+      "name": "OLED TV",
+      "parentId": "19",
+      "active": true
+    },
+    {
+      "id": "162",
+      "name": "Cloth Dryer",
+      "parentId": "66",
+      "active": true
+    },
+    {
+      "id": "163",
+      "name": "Water Cooler",
+      "parentId": "209",
+      "active": true
+    },
+    {
+      "id": "164",
+      "name": "Water Dispenser",
+      "parentId": "209",
+      "active": true
+    },
+    {
+      "id": "165",
+      "name": "Deep Freezer",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "166",
+      "name": "Voltage Stabilizer",
+      "parentId": "58",
+      "active": false
+    },
+    {
+      "id": "167",
+      "name": "Projectors",
+      "parentId": "15",
+      "active": true
+    },
+    {
+      "id": "168",
+      "name": "Accessories",
+      "parentId": "0",
+      "active": false
+    },
+    {
+      "id": "169",
+      "name": "Camera Accessories",
+      "parentId": "50",
+      "active": false
+    },
+    {
+      "id": "170",
+      "name": "Audio Accessories",
+      "parentId": "15",
+      "active": true
+    },
+    {
+      "id": "171",
+      "name": "Memory & Storage",
+      "parentId": "168",
+      "active": true
+    },
+    {
+      "id": "172",
+      "name": "Power",
+      "parentId": "168",
+      "active": true
+    },
+    {
+      "id": "173",
+      "name": "Portable AC",
+      "parentId": "63",
+      "active": true
+    },
+    {
+      "id": "174",
+      "name": "Wall Mounted Split AC",
+      "parentId": "63",
+      "active": true
+    },
+    {
+      "id": "175",
+      "name": "Cassette AC",
+      "parentId": "63",
+      "active": true
+    },
+    {
+      "id": "176",
+      "name": "Tower AC",
+      "parentId": "63",
+      "active": true
+    },
+    {
+      "id": "177",
+      "name": "8K Ultra HD TV",
+      "parentId": "19",
+      "active": true
+    },
+    {
+      "id": "178",
+      "name": "Smart TV",
+      "parentId": "19",
+      "active": true
+    },
+    {
+      "id": "179",
+      "name": "QLED TV",
+      "parentId": "19",
+      "active": true
+    },
+    {
+      "id": "180",
+      "name": "Television Accessories",
+      "parentId": "19",
+      "active": false
+    },
+    {
+      "id": "181",
+      "name": "Triple Door Refrigerator",
+      "parentId": "59",
+      "active": true
+    },
+    {
+      "id": "182",
+      "name": "French Door Refrigerator",
+      "parentId": "59",
+      "active": true
+    },
+    {
+      "id": "183",
+      "name": "Mini Refrigerator",
+      "parentId": "59",
+      "active": true
+    },
+    {
+      "id": "184",
+      "name": "Wine Cellar",
+      "parentId": "59",
+      "active": true
+    },
+    {
+      "id": "185",
+      "name": "Built In Refrigerator",
+      "parentId": "59",
+      "active": true
+    },
+    {
+      "id": "186",
+      "name": "Bottom Freezer Refrigerator",
+      "parentId": "59",
+      "active": true
+    },
+    {
+      "id": "187",
+      "name": "Washer",
+      "parentId": "66",
+      "active": true
+    },
+    {
+      "id": "188",
+      "name": "Gaming Laptop",
+      "parentId": "122",
+      "active": true
+    },
+    {
+      "id": "189",
+      "name": "MacBook Laptop",
+      "parentId": "122",
+      "active": true
+    },
+    {
+      "id": "190",
+      "name": "Convertible Laptop",
+      "parentId": "122",
+      "active": true
+    },
+    {
+      "id": "191",
+      "name": "Thin & Light Laptop",
+      "parentId": "122",
+      "active": true
+    },
+    {
+      "id": "192",
+      "name": "Windows Laptop",
+      "parentId": "122",
+      "active": true
+    },
+    {
+      "id": "193",
+      "name": "AIO Desktop",
+      "parentId": "124",
+      "active": true
+    },
+    {
+      "id": "194",
+      "name": "Tower Desktop",
+      "parentId": "124",
+      "active": true
+    },
+    {
+      "id": "195",
+      "name": "Server Desktop",
+      "parentId": "124",
+      "active": true
+    },
+    {
+      "id": "196",
+      "name": "InkJet Multi Function Printer",
+      "parentId": "125",
+      "active": false
+    },
+    {
+      "id": "197",
+      "name": "Colour Laser Printer",
+      "parentId": "125",
+      "active": true
+    },
+    {
+      "id": "198",
+      "name": "Laser Multi Function Printer",
+      "parentId": "125",
+      "active": false
+    },
+    {
+      "id": "199",
+      "name": "Laser Network Printer",
+      "parentId": "125",
+      "active": false
+    },
+    {
+      "id": "200",
+      "name": "Ink Tank MultiFunction Printer",
+      "parentId": "125",
+      "active": false
+    },
+    {
+      "id": "201",
+      "name": "Ink Tank Printer",
+      "parentId": "125",
+      "active": true
+    },
+    {
+      "id": "202",
+      "name": "LCD Projector",
+      "parentId": "167",
+      "active": false
+    },
+    {
+      "id": "203",
+      "name": "LED Projector",
+      "parentId": "167",
+      "active": false
+    },
+    {
+      "id": "204",
+      "name": "Projectors Accessories",
+      "parentId": "167",
+      "active": false
+    },
+    {
+      "id": "205",
+      "name": "CRT TV",
+      "parentId": "19",
+      "active": false
+    },
+    {
+      "id": "206",
+      "name": "Smart Watch",
+      "parentId": "207",
+      "active": true
+    },
+    {
+      "id": "207",
+      "name": "Smart Wearables",
+      "parentId": "32",
+      "active": true
+    },
+    {
+      "id": "208",
+      "name": "Headphones",
+      "parentId": "15",
+      "active": true
+    },
+    {
+      "id": "209",
+      "name": "Water Purifiers & Dispensers",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "210",
+      "name": "Floor & Home Care",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "211",
+      "name": "Beverage Makers",
+      "parentId": "91",
+      "active": true
+    },
+    {
+      "id": "212",
+      "name": "Hair Grooming",
+      "parentId": "82",
+      "active": true
+    },
+    {
+      "id": "213",
+      "name": "Skin Care",
+      "parentId": "82",
+      "active": false
+    },
+    {
+      "id": "214",
+      "name": "Linux Laptop",
+      "parentId": "122",
+      "active": true
+    },
+    {
+      "id": "215",
+      "name": "Amplified Speaker",
+      "parentId": "31",
+      "active": true
+    },
+    {
+      "id": "216",
+      "name": "Multimedia Speaker",
+      "parentId": "31",
+      "active": true
+    },
+    {
+      "id": "217",
+      "name": "Smart Speaker",
+      "parentId": "31",
+      "active": true
+    },
+    {
+      "id": "218",
+      "name": "Tower Speaker",
+      "parentId": "31",
+      "active": true
+    },
+    {
+      "id": "219",
+      "name": "Neckband",
+      "parentId": "208",
+      "active": true
+    },
+    {
+      "id": "220",
+      "name": "Truly Wireless Earbuds",
+      "parentId": "208",
+      "active": true
+    },
+    {
+      "id": "221",
+      "name": "Wireless Earphone",
+      "parentId": "208",
+      "active": false
+    },
+    {
+      "id": "222",
+      "name": "Wireless Headphone",
+      "parentId": "208",
+      "active": true
+    },
+    {
+      "id": "223",
+      "name": "Gaming Accessories",
+      "parentId": "114",
+      "active": false
+    },
+    {
+      "id": "224",
+      "name": "Room Coolers",
+      "parentId": "58",
+      "active": true
+    },
+    {
+      "id": "226",
+      "name": "Climate Controller",
+      "parentId": "210",
+      "active": false
+    },
+    {
+      "id": "227",
+      "name": "Insects Killer",
+      "parentId": "210",
+      "active": false
+    },
+    {
+      "id": "228",
+      "name": "Locker Biometric",
+      "parentId": "90",
+      "active": true
+    },
+    {
+      "id": "229",
+      "name": "Locker Digital",
+      "parentId": "90",
+      "active": true
+    },
+    {
+      "id": "230",
+      "name": "Callus Remover",
+      "parentId": "213",
+      "active": false
+    },
+    {
+      "id": "231",
+      "name": "Locker Key Lock",
+      "parentId": "90",
+      "active": true
+    },
+    {
+      "id": "232",
+      "name": "Face Shaver Dry",
+      "parentId": "213",
+      "active": true
+    },
+    {
+      "id": "233",
+      "name": "Face Shaver Dry & Wet",
+      "parentId": "212",
+      "active": true
+    },
+    {
+      "id": "234",
+      "name": "Lady Shaver",
+      "parentId": "212",
+      "active": true
+    },
+    {
+      "id": "235",
+      "name": "Nail Shiner",
+      "parentId": "213",
+      "active": false
+    },
+    {
+      "id": "236",
+      "name": "Nose & Ear Trimmer",
+      "parentId": "212",
+      "active": false
+    },
+    {
+      "id": "237",
+      "name": "Pen Groomer",
+      "parentId": "212",
+      "active": true
+    },
+    {
+      "id": "238",
+      "name": "Hair Brush",
+      "parentId": "283",
+      "active": true
+    },
+    {
+      "id": "239",
+      "name": "Hair Curler",
+      "parentId": "283",
+      "active": true
+    },
+    {
+      "id": "240",
+      "name": "Hair Multi Styler",
+      "parentId": "283",
+      "active": true
+    },
+    {
+      "id": "241",
+      "name": "Hair Straightener",
+      "parentId": "283",
+      "active": true
+    },
+    {
+      "id": "242",
+      "name": "Juice Extractor",
+      "parentId": "211",
+      "active": false
+    },
+    {
+      "id": "243",
+      "name": "Soda Maker",
+      "parentId": "211",
+      "active": false
+    },
+    {
+      "id": "244",
+      "name": "Soup Maker",
+      "parentId": "211",
+      "active": false
+    },
+    {
+      "id": "245",
+      "name": "Barbeque",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "246",
+      "name": "Bread Maker",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "247",
+      "name": "Built in Hob",
+      "parentId": "102",
+      "active": true
+    },
+    {
+      "id": "248",
+      "name": "Built in Oven",
+      "parentId": "102",
+      "active": true
+    },
+    {
+      "id": "249",
+      "name": "Deep Fryer",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "250",
+      "name": "Dosa Maker",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "251",
+      "name": "Drink Maker",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "252",
+      "name": "Egg Boiler",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "253",
+      "name": "Food Steamer",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "254",
+      "name": "Gas Stove",
+      "parentId": "102",
+      "active": true
+    },
+    {
+      "id": "255",
+      "name": "Halogen Oven",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "256",
+      "name": "Idli Maker",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "257",
+      "name": "Oven Toaster & Griller",
+      "parentId": "110",
+      "active": true
+    },
+    {
+      "id": "258",
+      "name": "Pizza and Pasta Maker",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "259",
+      "name": "Popcorn Maker",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "260",
+      "name": "Pop Up Toaster",
+      "parentId": "110",
+      "active": true
+    },
+    {
+      "id": "261",
+      "name": "Pressure Cooker",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "262",
+      "name": "Rice Cooker",
+      "parentId": "102",
+      "active": true
+    },
+    {
+      "id": "263",
+      "name": "Roti Maker",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "264",
+      "name": "Sandwich maker",
+      "parentId": "110",
+      "active": true
+    },
+    {
+      "id": "265",
+      "name": "Ice Cream Maker",
+      "parentId": "102",
+      "active": false
+    },
+    {
+      "id": "266",
+      "name": "Chopper",
+      "parentId": "92",
+      "active": true
+    },
+    {
+      "id": "267",
+      "name": "Hand Mixer",
+      "parentId": "96",
+      "active": true
+    },
+    {
+      "id": "268",
+      "name": "Juicer",
+      "parentId": "96",
+      "active": true
+    },
+    {
+      "id": "269",
+      "name": "Grill Microwave",
+      "parentId": "98",
+      "active": true
+    },
+    {
+      "id": "270",
+      "name": "Telephones",
+      "parentId": "32",
+      "active": true
+    },
+    {
+      "id": "271",
+      "name": "Gaming Software",
+      "parentId": "114",
+      "active": false
+    },
+    {
+      "id": "276",
+      "name": "Wall Fan",
+      "parentId": "70",
+      "active": true
+    },
+    {
+      "id": "277",
+      "name": "Pedestal Fan",
+      "parentId": "70",
+      "active": true
+    },
+    {
+      "id": "278",
+      "name": "Tower Fan",
+      "parentId": "70",
+      "active": true
+    },
+    {
+      "id": "279",
+      "name": "Garment Steamer",
+      "parentId": "79",
+      "active": true
+    },
+    {
+      "id": "280",
+      "name": "Convection Microwave Oven",
+      "parentId": "98",
+      "active": true
+    },
+    {
+      "id": "281",
+      "name": "Built In Microwave",
+      "parentId": "98",
+      "active": true
+    },
+    {
+      "id": "283",
+      "name": "Hair Styling",
+      "parentId": "82",
+      "active": true
+    },
+    {
+      "id": "284",
+      "name": "Body Groomer",
+      "parentId": "212",
+      "active": true
+    },
+    {
+      "id": "285",
+      "name": "Multi Groomer",
+      "parentId": "212",
+      "active": true
+    }
+  ]
 }

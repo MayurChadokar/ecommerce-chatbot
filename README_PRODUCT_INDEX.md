@@ -191,13 +191,25 @@ store offers are not mixed with old snapshot pricing fields. Conditional store
 offers never become the online selling price. Price and stock are checked on
 each request; no price/stock cache has been introduced.
 
-On API failure, an unconstrained search can still return the real indexed
-name/image/link/features, but the current price is `Price unavailable` and stock
-is `Unknown`. With a budget, unknown-price candidates are excluded; if no results
-remain and some prices could not be checked, `/search` returns HTTP 503 with
-`data.error_code: price_unverified`. Partial successful results expose unverified
-counts. Verified products outside the budget produce normal empty results.
-An actual API `instock: No` remains out of stock; an API failure never means that.
+On API failure, search returns real Pinecone catalogue names, images, links and
+features, with a last-known catalogue price when present. These cards carry
+`catalogue_fallback: true`, `catalogue_price` and `price_verified: false`; their
+stock remains `Unknown` unless that stock was independently verified. Catalogue
+prices can suggest budget options during an outage, but never guarantee a current
+budget match. Successfully verified live prices always override catalogue prices.
+If the normal verification batch finds no budget options during an outage, the
+remaining already-retrieved Pinecone candidates can supply catalogue options
+without extra API requests. If neither live nor catalogue candidates match the
+budget, the existing `price_unverified` error remains. An actual API `instock: No`
+remains out of stock; an API failure never means that.
+
+The chat preserves fallback cards even when the model replies with only an
+apology. It shows a dismissible "Verify live price & stock" popup, a last-known
+price label and the real View product link. The popup is driven by current-turn
+backend fallback facts; successful live responses do not show it. In-stock-only
+recommendations return unconfirmed alternatives separately as `catalogue_products`,
+so these are never asserted to be confirmed in stock. Orders still require their
+existing independent successful live price/stock check.
 
 In-stock recommendations reuse the already verified results instead of making a
 second batch of API calls. Orders still perform their existing independent stock

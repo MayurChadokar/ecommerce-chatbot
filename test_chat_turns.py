@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
-from chat_context import build_chat_context, message_text
+from chat_context import build_chat_context, message_text, empty_product_search_response
 
 
 class State(TypedDict):
@@ -34,6 +34,7 @@ class TurnTests(TestCase):
             model=self.model,response_model=self.responder,fallback_model=None,fallback_response_model=None,
             redis_memory=Mock(),SYSTEM_PROMPT='Use the current request',logger=logging.getLogger('turn-test'),
             PRIMARY_GEMINI_MODEL='test',FALLBACK_GEMINI_MODEL='test',message_text=message_text,
+            empty_product_search_response=empty_product_search_response,
             tools_by_name={'details':self.details,'stores':self.stores,'prepare_bulk_order_enquiry':self.bulk},
             StateGraph=StateGraph,END=END)
         tree=ast.parse(Path('chat.py').read_text(encoding='utf-8'))
@@ -80,6 +81,33 @@ class TurnTests(TestCase):
         rendered=self.responder.invoke.call_args.args[0][-1].content
         self.assertIn('Morphy Richards',rendered)
         self.assertIn('Test store',rendered)
+
+    def test_empty_search_cannot_invent_release_status(self):
+        search = Mock()
+        search.invoke.return_value = json.dumps({'search_query': 'iphone 18 pro', 'products': []})
+        self.scope['tools_by_name']['search_products'] = search
+        self.choose('search_products')
+        self.responder.invoke.return_value = AIMessage(content='The iPhone has not been released yet.')
+        result = self.run_turn('iphone 18 pro')
+        response = json.loads(result['messages'][-1].content)
+        self.assertEqual(response['products'], [])
+        self.assertIn('catalogue records checked', response['answer'])
+        self.assertIn('iphone 18 pro', response['answer'])
+        self.assertNotIn('released', json.dumps(response))
+        self.responder.invoke.assert_not_called()
+
+    def test_empty_search_shortcut_preserves_errors_matches_and_other_tools(self):
+        for payload in ({'products': [], 'error': 'Search unavailable'},
+                        {'products': [], 'error_code': 'price_unverified'},
+                        {'products': [{'product_id': '43039'}]}, {'unexpected': []}):
+            with self.subTest(payload=payload):
+                self.assertIsNone(empty_product_search_response([
+                    {'tool': 'search_products', 'result': json.dumps(payload)}]))
+        self.assertIsNone(empty_product_search_response([
+            {'tool': 'search_products', 'result': '{"products": []}'},
+            {'tool': 'get_near_store', 'result': '{"stores": [{"name": "Indore"}]}'}]))
+        self.assertIsNone(empty_product_search_response([
+            {'tool': 'search_products', 'result': 'Malformed result'}]))
 
     def test_same_session_does_not_accumulate_old_graph_messages(self):
         self.choose('details');self.run_turn()

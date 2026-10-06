@@ -1,0 +1,24 @@
+# Copy to /opt/lotus-chatbot/.env and replace the placeholder values.
+# Keep this file's real values out of Git. The application's .env is ignored.
+GEMINI_API_KEY=replace-with-your-fresh-gemini-key
+FLASK_SECRET=replace-with-a-random-secret
+ADMIN_PASSWORD=replace-with-a-strong-admin-password
+FLASK_DEBUG=false
+
+ENABLE_VECTOR_SEARCH=true
+PINECONE_API_KEY=replace-with-your-fresh-pinecone-key
+PINECONE_INDEX_NAME=lotus-products-minilm
+PINECONE_HOST=https://lotus-products-minilm-8dkv7yj.svc.aped-4627-b74a.pinecone.io
+PINECONE_NAMESPACE=lotus-products-sql-20260928
+
+# Product search uses the downloaded MiniLM cache under this path.
+HF_HOME=/opt/lotus-chatbot/.cache/huggingface
+TOKENIZERS_PARALLELISM=false
+
+# A valid Lotus token is needed for current price/stock and order checks.
+LOTUS_AUTH_TOKEN=replace-with-your-valid-lotus-token
+LOTUS_LIVE_ENRICHMENT=true
+LOTUS_LIVE_ENRICHMENT_TIMEOUT=6
+
+# The legacy policy-vector integration needs a separate index and dependencies.
+ENABLE_POLICY_VECTOR_SEARCH=false

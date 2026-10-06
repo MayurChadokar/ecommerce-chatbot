@@ -160,6 +160,30 @@ class SearchTests(unittest.TestCase):
         record = self.search._record("7", data)
         self.assertEqual(json.loads(self.search.format_results([record]))["products"][0]["features"], [])
 
+    def test_iphone_generation_accepts_catalogue_mobile_word(self):
+        titles = ["Apple iPhone Mobile 18 Pro (1TB ROM) Black",
+                  "Apple iPhone 18 Pro (256GB ROM) Silver",
+                  "Apple iPhone Mobile 17 Pro Black", "Apple iPad Pro 18"]
+        self.search.index.query.return_value.matches = [
+            SimpleNamespace(id=str(i), score=.9, metadata={**metadata(str(i)), "product_name": title})
+            for i, title in enumerate(titles)]
+        with patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "false"}):
+            results = self.search.search_products("iphone 18 pro")
+        self.assertEqual([r["product_name"] for r in results], titles[:2])
+        self.assertEqual(json.loads(self.search.format_results(results))["total_found"], 2)
+
+    def test_iphone_variant_does_not_substitute_another_model(self):
+        titles = ["Apple iPhone Mobile 18 Pro", "Apple iPhone Mobile 18 Pro Max",
+                  "Apple iPhone Mobile 18", "Apple iPhone Mobile 18 Air",
+                  "Apple iPhone Mobile 17 Pro"]
+        records = [{"product_name": title} for title in titles]
+        for query, expected in (("iphone 18", titles[:4]), ("iphone 18 pro", titles[:1]),
+                                ("iphone 18 pro max", titles[1:2]), ("iphone 18 air", titles[3:4]),
+                                ("iphone 19 pro", []), ("IPHONE MOBILE 18 PRO?", titles[:1])):
+            with self.subTest(query=query):
+                filtered = self.search._apply_query_intent_filter(records, query)
+                self.assertEqual([r["product_name"] for r in filtered], expected)
+
     def test_failure_returns_error_not_empty_success(self):
         self.search.index.query.side_effect = RuntimeError("private request details")
         self.assertEqual(self.search.search_products("phone"), [])

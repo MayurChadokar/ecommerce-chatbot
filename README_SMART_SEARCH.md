@@ -1,6 +1,6 @@
 # Website smart search
 
-`POST /api/search/smart` is a separate, stateless website endpoint. Existing
+`POST /api/search/smart` (also `POST /smart/search`) is a separate, stateless website endpoint. Existing
 `/chat`, `/search`, prompts, history and tool execution remain unchanged.
 It reuses the existing Pinecone client, MiniLM embedding model, unbound Gemini
 client/configuration, price mapping and live product-detail verification.
@@ -29,8 +29,15 @@ Optional `category` defaults to `all` (normal search). An exact catalogue label
 such as `Double Door Refrigerator` or a supported broad alias such as
 `Refrigerator`, `laptop`, `tv`, `ac`, `washing machine`, or `phone` constrains
 retrieval to that category/group. Brand matching runs within that scope.
-Unknown categories or conflicting query categories return HTTP 400. The LLM
-cannot broaden the selected category. `data.selectedCategory` echoes the choice.
+Master parent labels such as `Computers`, `Television`, and `Home Appliances`
+include indexed descendants and products in the parent bucket itself. Query
+subtypes can narrow that scope. A functional washing-machine query excludes
+adjacent cloth dryers even though both appear in the same master department.
+Unknown category names reach the AI for a grounded semantic match. An ambiguous
+name or conflict with the selected category returns HTTP 200 with empty products
+and `clarificationRequired: true`; an unsupported function returns a clear
+unavailable response. Malformed requests still return HTTP 400.
+The LLM cannot broaden a known selected category. `data.selectedCategory` echoes the choice.
 Product cards are in `data.products` and include existing `product_id`,
 `product_name`, `product_mrp` (formatted online price), `selling_price`,
 `product_url`, `product_image`, features, and verified availability fields.
@@ -56,6 +63,25 @@ that name. `brandResolution` preserves requested and applied brands;
 prevent it. Explicit compound names remain specific.
 A valid zero-match response has HTTP 200 and an empty products array.
 
+`data.categoryResolution` records `requestedCategory`, `canonicalCategory`,
+`matchType`, `matchedCategories`, `suggestedCategories`, and `status`.
+Statuses are `resolved`, `no_matches`, `alternatives`, `unavailable`, and
+`clarification_required`. `data.message` and `searchNotices` explain the result.
+`matchType` can be `query`, `exact`, `family`, `equivalent`, `semantic`, `attribute`,
+`unknown`, or `unavailable`.
+
+A known subtype without its own indexed bucket, such as `Linux Laptop` or
+`8K Ultra HD TV`, searches related indexed categories while retaining its
+distinguishing property as a mandatory attribute. A Windows laptop is never
+returned in `products` as a Linux match. If no strict candidates exist in the
+retrieved window, up to six nearby verified candidates may appear separately
+in `data.alternatives` on page 1. Only subtype attributes may be relaxed;
+brand, budget, colour, RAM, model and other requirements remain applied.
+`categoryResolution.relaxedAttributes` identifies the difference and
+`alternativeVerification` reports those candidates' live checks. No unrelated
+department is used as a substitute for an unsupported product function.
+Alternative results are neither exact matches nor whole-catalogue absence proof.
+
 ## Retrieval and pagination contract
 
 Known brand/category filters apply inside Pinecone. Model and literal attribute
@@ -79,17 +105,20 @@ catalogue export or guaranteed exhaustive SQL-style pagination.
 
 Live verification runs in batches of at most 20 using the existing bounded
 worker pool and deadline. Prices/inventory are never cached here. Every explicit
-budget is checked against verified current online prices, never snapshot prices
-or conditional store offers. Missing price/stock is marked unknown. Partial
+verified budget match uses current online prices, never conditional store offers.
+During a live-check failure, last-known catalogue prices may suggest candidates;
+those cards remain explicitly unverified and cannot confirm a current budget match.
+Missing price/stock is marked unknown. Partial
 verification is reported in `data.verification`; do not treat an unverified
 price as zero or unknown stock as out of stock.
 
 ## AI and failures
 
-Every valid, uncached query goes to the existing Gemini client FIRST, including
+Every interpretable, uncached query goes to the existing Gemini client FIRST, including
 simple queries such as `mobile under 35000` and `voltas washing machine`.
-The complete original query, real catalogue vocabulary and indexed brand-category
-pairs go into a separate structured-output prompt. Lexical parsing supplies
+The complete original query (plus an optional selected category), real catalogue vocabulary, catalogue-derived category
+families and relevant indexed brand-category pairs go into a compact structured-output
+prompt. The full brand map stays in local grounding checks. Lexical parsing supplies
 constraint checks and a failure fallback; it does not bypass the LLM or override
 a validated semantic interpretation. Calls
 contain only a system prompt and the current query; there are no chat messages,
@@ -100,6 +129,14 @@ can therefore match Android Smartphone without requiring the word `smart`.
 Hinglish descriptions such as `kapde dhone ki machine` can map to washing-machine
 categories; use cases such as `good camera` become ranking preferences, not
 invented megapixel constraints. Retrieval embeds the canonical interpreted intent.
+
+Source buckets whose names sound generic do not necessarily represent the whole
+family. For example, `Laptops` is one bucket alongside Gaming, Windows, MacBook,
+Convertible and Thin & Light laptops. The AI sees those family relationships and
+selects the categories itself. A wrong ambiguous selection is rejected and repaired
+by the AI rather than expanded after generation. Descriptive requests can select
+subtypes (`halka laptop` selects Thin & Light); category evidence combines by
+intersection so a broad family cannot undo a requested subtype.
 
 Grounding checks reject missing source phrases, omitted constraints, unsupported
 labels, unrelated brand substitutions, changed numeric specifications and colours,
@@ -118,7 +155,11 @@ for a Voltas washing-machine request while keeping Voltas for ACs. Broader
 unrelated brand associations remain unsupported rather than silently guessed.
 
 Gemini receives an inlined native JSON schema with structural types, required
-fields and enums. Array/string length and numeric limits are enforced by the
+fields and resolution-kind enums. Brand/category enums are included only for small
+vocabularies (up to 32 labels); large string enums exceed provider grammar complexity.
+Full catalogue membership is always checked locally. Unique label formatting
+differences (case, spaces, punctuation) are canonicalized; semantic guesses are not
+accepted as label corrections. Array/string length and numeric limits are enforced by the
 full strict Pydantic schema after generation. This avoids the HTTP 400 rejection
 observed with the original nested bounded schema on the configured model.
 See [Gemini structured-output documentation](https://ai.google.dev/gemini-api/docs/structured-output)
@@ -130,6 +171,14 @@ metadata contains `searchMode: "keyword"` and `fallbackReason` of `ai_timeout`,
 existing Pinecone/embedding infrastructure with deterministic filters and strict
 literal term checks. The project has no separate full-text catalogue service;
 this fallback is not an exhaustive database keyword scan.
+
+An HTTP connection/protocol failure (including `RemoteProtocolError`) receives
+one immediate retry when at least two seconds remain. Transport recovery and
+schema repair share a maximum of two total attempts under the same original
+deadline. SDK invocation uses `max_retries=1`, which means one SDK attempt, so
+SDK and application retries cannot multiply. Authentication and unrelated
+errors are not retried by this transport recovery path. A repeated outage still
+returns disclosed `ai_provider_failure`; the UI must not present it as AI success.
 
 Catalogue failures and an inability to verify any candidate prices return:
 
@@ -160,10 +209,9 @@ credentials in Angular.
   Each search request also passes the deadline and a single HTTP attempt to the
   shared client's invocation, preventing chatbot retries from extending search
   work in the background. Chatbot client defaults are not modified.
-  Gemini rejects a manually supplied HTTP deadline below ten seconds. For
-  configured limits under ten, the caller still falls back at its requested
-  deadline while the provider call has a ten-second minimum and retains its
-  bounded slot until completion. The default twelve seconds satisfies both.
+  The HTTP timeout uses the remaining caller budget, including the repair attempt.
+  Gemini's separate `X-Server-Timeout` header retains its ten-second minimum;
+  this does not extend the local HTTP timeout or caller deadline.
 - `LOTUS_LIVE_ENRICHMENT_TIMEOUT=6`: existing per-batch live verification deadline.
   Smart search always verifies live prices, independently of the chatbot's
   `LOTUS_LIVE_ENRICHMENT` flag. Larger pages can need multiple batches.
@@ -172,9 +220,17 @@ credentials in Angular.
   match the active index namespace or search returns 503.
 
 The committed vocabulary was derived from the current validated product export;
-it contains labels/version context only, no price or inventory. Successful,
+it contains labels/version context and the public master-category hierarchy,
+no price or inventory. The current master has 176 active category labels;
+124 indexed category buckets have searchable product metadata. Active parent
+labels and missing leaf labels are resolved against that hierarchy locally.
+Conflicting selections and known unavailable branches can return immediately
+without an AI or product-index call. Successful,
 validated AI interpretations are cached per process for five minutes (maximum
 256 entries), keyed by normalized original query, brand mode, namespace and vocabulary version.
+Concurrent requests for the same key share one interpretation call, including
+pagination requests. Each request still retrieves candidates and verifies live
+prices separately; this cache does not make inventory stale.
 Failures, products, price and stock are never cached. The shared AI client and
 prompt configuration are fixed for the lifetime of a process; restart after
 changing them. After catalogue reindexing/new brands or categories, regenerate
@@ -183,6 +239,13 @@ and deploy the vocabulary with the matching index, then restart the service:
 ```powershell
 .venv/Scripts/python.exe scripts/build_search_taxonomy.py --products data/product-index/sql-preview/products.jsonl --namespace lotus-products-sql-20260928 --output smart_search_taxonomy.json
 ```
+
+Supply `--categories-sql <path-to-authorized-catalogue-dump.sql>` to include the
+master hierarchy in a regenerated vocabulary. This streaming parser reads only
+the allowlisted `les_category` table and exports its label, ID, parent ID and
+active flag. It never executes the dump or exports other tables. Deploy the
+new vocabulary and restart together; omitting this argument produces a legacy
+indexed-label-only vocabulary without master hierarchy resolution.
 
 New products become searchable once the existing indexing pipeline adds them to
 Pinecone. This endpoint does not add an ingestion scheduler; API-only products
@@ -205,6 +268,9 @@ this.http.post<any>('/api/search/smart', {
 }).subscribe({
   next: response => {
     this.products = response.data.products;
+    this.alternatives = response.data.alternatives || [];
+    this.searchMessage = response.data.message;
+    this.clarificationRequired = response.data.clarificationRequired;
     this.nextPage = response.data.pagination.nextPage;
     // Show corrections/fallback metadata and unknown prices when present.
   },
@@ -213,6 +279,10 @@ this.http.post<any>('/api/search/smart', {
 ```
 
 Use debounceTime/distinctUntilChanged/switchMap for a search-as-you-type UI.
+Display `alternatives` in a separate labelled section and show `message` /
+`searchNotices`; never combine alternatives into the exact-match product list.
+When `clarificationRequired` is true, offer the suggested categories or ask the
+user to name the product type. No frontend implementation is included here.
 Append subsequent pages with the same query/category/pageSize/city; deduplicate by
 product_id if the catalogue is being updated. The backend already returns an
 array; Angular does not need to parse chatbot text.
@@ -220,13 +290,28 @@ array; Angular does not need to parse chatbot text.
 ## Verification
 
 ```powershell
-.venv/Scripts/python.exe -m unittest test_smart_search test_live_enrichment test_chat_turns test_product_index test_product_pricing test_product_availability test_bulk_orders -q
+.venv/Scripts/python.exe -m unittest test_category_resolver test_smart_search test_live_enrichment test_chat_turns test_product_index test_product_pricing test_product_availability test_bulk_orders -q
 ```
 
 The focused tests cover amount normalization, typo/brand/category constraints,
 budget boundaries, current-price filtering, invalid output, timeout/provider
 fallbacks, outage errors, request validation, SKU priority, pagination, no chat
 imports/history/tools and unchanged existing chatbot regression checks.
+
+The 2026-10-05 master-category resolver passed 159 offline search/chat checks
+and 20 indexing checks. The search suite includes HTTP responses for all 176
+active master labels with mocked providers, hierarchy coverage, semantic parent
+evidence, clarification, numeric resolution preservation, and alternatives that
+retain brand/budget/RAM. A mixed accessories department cannot supply mouse or
+keyboard alternatives for an unavailable storage device.
+
+Real Gemini probes used public/user-supplied category names and synthetic
+catalogue context, without reading or transmitting the internal catalogue.
+They validated notebook/laptop, gaming notebook, light-laptop Hinglish, Linux,
+8K, television, washing-machine, ambiguity and unsupported-function behavior.
+Final ambiguity and unsupported probes used one AI call each; the three final
+interpretations took 1.69–2.05 seconds. These timings exclude product retrieval
+and live prices and do not guarantee production latency or catalogue coverage.
 
 On 2026-09-30, 122 offline tests passed. Live checks returned HTTP 200 for the
 Hinglish budget query, the zero-match Voltas typo query and the AI-assisted

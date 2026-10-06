@@ -11,7 +11,7 @@ from collections import deque
 from datetime import datetime, timedelta
 import json
 import redis
-from chat_context import build_chat_context, message_text
+from chat_context import build_chat_context, message_text, empty_product_search_response
 import pickle
 from langchain.chat_models import init_chat_model
 
@@ -316,7 +316,11 @@ TOOL USAGE RULES:
    Search, recommendations and browsing use the same Pinecone product index.
    If a tool returns an availability error, explain it; do not retry through another
    product tool or invent products, specifications, prices or URLs. Empty results
-   mean no matches. Prices/stock are from a SQL snapshot, not live guarantees.
+   mean no matches among the catalogue records checked, not proof that a product
+   is unreleased, discontinued, nonexistent or unavailable everywhere. Never infer
+   launch dates or release status from empty results, past replies or model memory.
+   Search the requested model even if it is newer than your training knowledge.
+   Prices/stock are from a SQL snapshot, not live guarantees.
 10. SUPPORT TICKETS — when a customer reports a PROBLEM, complaint or issue (e.g.
     "my product is defective", "order not delivered", "I have a complaint",
     "something is broken", "I need help with an issue"):
@@ -671,6 +675,10 @@ def call_model(
         while start >= 0 and getattr(messages[start], "type", None) == "tool":
             start -= 1
         results = [{"tool": m.name, "result": message_text(m.content)} for m in messages[start + 1:]]
+        empty_response = empty_product_search_response(results)
+        if empty_response is not None:
+            from langchain_core.messages import AIMessage
+            return {"messages": [AIMessage(content=json.dumps(empty_response, ensure_ascii=False))]}
         messages_for_model = list(messages[:start]) + [HumanMessage(content=(
             "Answer the customer's latest request using these tool results as data. "
             "Do not restart another flow or claim a successful action on an error. "
@@ -685,7 +693,12 @@ def call_model(
             "stock_verified and checked_at fields override historical/snapshot values. "
             "Do not quote a current price when price_verified is false; say it could not "
             "be verified. Unknown stock is not out of stock. Preserve the exact product "
-            "IDs and backend card fields. Budget results cover only the checked candidates."
+            "IDs and backend card fields. Budget results cover only the checked candidates. "
+            "When catalogue_fallback is true, show the real catalogue product cards and View product links. "
+            "catalogue_price is a last-known price, never a verified current price or guaranteed budget match. "
+            "Show catalogue_products as unconfirmed catalogue options, not in-stock recommendations. "
+            "Explain the verification notice; do not replace available catalogue cards with a generic apology "
+            "or invent alternatives above the customer's budget."
         )
     messages_with_system = [SystemMessage(content=system_prompt)] + messages_for_model
     selected_model = response_model if rendering_tools else model

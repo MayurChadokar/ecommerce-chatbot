@@ -1,0 +1,32 @@
+[Unit]
+Description=Lotus Electronics Flask chatbot
+Wants=network-online.target redis-server.service
+After=network-online.target redis-server.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=lotus-chatbot
+Group=lotus-chatbot
+WorkingDirectory=/opt/lotus-chatbot
+Environment=PYTHONUNBUFFERED=1
+Environment=TOKENIZERS_PARALLELISM=false
+Environment=HF_HOME=/opt/lotus-chatbot/.cache/huggingface
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+# python-dotenv loads .env from the application's working directory.
+ExecStart=/opt/lotus-chatbot/.venv/bin/gunicorn --config /opt/lotus-chatbot/deploy/gunicorn.conf.py app:app
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

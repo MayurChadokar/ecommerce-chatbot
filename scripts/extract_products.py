@@ -100,7 +100,10 @@ class ValuesParser:
                 raise ValueError("Unsupported SQL syntax; dump was not executed")
 
 
-def iter_product_rows(path):
+def iter_product_rows(path, allowed_tables=None):
+    selected_tables = TABLES if allowed_tables is None else set(allowed_tables)
+    if not selected_tables.issubset(TABLES):
+        raise ValueError("Only public product tables may be extracted")
     active = None
     # Streaming skips large unrelated tables without retaining their data.
     with Path(path).open(encoding="utf-8-sig", errors="strict") as source:
@@ -109,7 +112,7 @@ def iter_product_rows(path):
                 if not line.startswith("INSERT INTO `"):
                     continue
                 table = line.split("`", 2)[1]
-                if table not in TABLES:
+                if table not in selected_tables:
                     continue
                 match = INSERT.match(line.rstrip("\r\n"))
                 if not match:

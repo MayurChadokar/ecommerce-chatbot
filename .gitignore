@@ -35,6 +35,7 @@ venv/
 /logs/
 /artifacts/
 /output/
+/.cache/
 /tmp????????/
 
 # Editor/OS leftovers and local backups.

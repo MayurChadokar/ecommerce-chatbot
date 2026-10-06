@@ -97,11 +97,9 @@ def get_filtered_product_details_tool(product_id: int, city: str = "INDORE") -> 
     if fallback:
         fallback.update(availability_fields(city=city))
         fallback["availability_message"] = detail["error"]
-        from live_product_enrichment import enabled, PRICE_FIELDS
+        from live_product_enrichment import enabled, merge_live, live_card_fields
         if enabled():
-            for key in PRICE_FIELDS:
-                fallback.pop(key, None)
-            fallback.update(product_mrp="Price unavailable", price_verified=False,
-                            price_source="unverified")
+            fallback = merge_live(fallback, None, city)
+            fallback.update(live_card_fields(fallback))
         return fallback
     return detail

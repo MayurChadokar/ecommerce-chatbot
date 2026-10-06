@@ -2,18 +2,22 @@
 import ast
 import json
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
+import httpx
 from flask import Flask
 from live_product_enrichment import enrich
 from product_availability import availability_fields
 from product_index import EMBEDDING_MODEL
 from smart_search import (SmartSearch, SearchUnavailable, Interpretation,
-                          AIInterpretation, ai_interpret, deterministic, provider_schema)
+                          AIInterpretation, ai_interpret, deterministic, provider_schema, interpretation_prompt)
+from search_taxonomy import category_families
 from smart_search_api import create_smart_search_blueprint
 with patch.dict(os.environ, {"ENABLE_VECTOR_SEARCH": "false"}):
     from tools.product_search_tool import ProductSearchTool
@@ -55,11 +59,12 @@ class SmartTests(unittest.TestCase):
             self.search.search("electronics", category="all")
         self.assertNotIn("category", self.catalogue.index.query.call_args.kwargs["filter"])
 
-    def test_invalid_or_conflicting_category_does_not_query_index(self):
+    def test_unknown_or_conflicting_category_clarifies_without_querying_index(self):
         for query, category in [("Samsung", "Imaginary category"),
                                 ("gaming laptop", "Double Door Refrigerator")]:
-            with self.assertRaises(ValueError):
-                self.search.search(query, category=category)
+            result = self.search.search(query, category=category)
+            self.assertTrue(result["clarificationRequired"])
+            self.assertEqual(result["products"], [])
         self.catalogue.index.query.assert_not_called()
 
     def test_broad_category_maps_to_catalogue_group(self):
@@ -110,6 +115,80 @@ class SmartTests(unittest.TestCase):
     def test_related_brand_not_substituted(self):
         intent, _, _ = deterministic("Voltas Beko fridge", TAXONOMY)
         self.assertEqual(intent.brands, ["Voltas Beko"])
+
+    def configure_laptops(self):
+        categories = ["Convertible Laptop", "Gaming Laptop", "Laptops",
+                      "MacBook Laptop", "Thin & Light Laptop", "Windows Laptop"]
+        self.search.taxonomy = {**TAXONOMY, "brands": [*TAXONOMY["brands"], "Asus", "HP"],
+                                "categories": [*categories, "Double Door Refrigerator"]}
+        matches = []
+        for index, category in enumerate(categories, 1):
+            record = match(str(index), brand="Asus", name="Asus " + category)
+            record.metadata["category"] = category
+            matches.append(record)
+        self.catalogue.index.query.return_value.matches = matches
+        self.ai.with_structured_output.return_value.invoke.return_value = AIInterpretation(
+            brands=[], categories=categories, price_min=None, price_max=None,
+            model="", attributes=[], preferences=[], resolutions=[]).model_dump()
+        return categories
+
+    def test_plural_laptops_uses_the_ai_family_selection(self):
+        categories = self.configure_laptops()
+        result = self.search.search("laptops", page_size=6)
+        self.assertEqual(result["appliedFilters"]["categories"], categories)
+        self.assertEqual({p["category"] for p in result["products"]}, set(categories))
+        self.assertEqual(result["interpretationSource"], "ai")
+        self.ai.with_structured_output.assert_called_once()
+        # A recognized product category should not cause an extra SKU lookup.
+        self.catalogue.index.query.assert_called_once()
+
+    def test_ambiguous_source_label_is_repaired_by_ai_not_expanded_in_code(self):
+        categories = self.configure_laptops()
+        invoke = self.ai.with_structured_output.return_value.invoke
+        valid = invoke.return_value
+        invoke.side_effect = [{**valid, "categories": ["Laptops"]}, valid]
+        result = self.search.search("laptops", page_size=6)
+        self.assertEqual(result["appliedFilters"]["categories"], categories)
+        self.assertEqual(result["interpretationSource"], "ai")
+        self.assertEqual(invoke.call_count, 2)
+        self.assertIn("omits sibling categories", invoke.call_args.args[0][0].content)
+
+    def test_repeated_ambiguous_ai_label_is_not_reported_as_smart(self):
+        self.configure_laptops()
+        self.ai.with_structured_output.return_value.invoke.return_value["categories"] = ["Laptops"]
+        result = self.search.search("laptops", page_size=6)
+        self.assertEqual(result["fallbackReason"], "invalid_ai_output")
+        self.assertEqual(result["interpretationSource"], "keyword")
+
+    def test_laptops_timeout_fallback_returns_the_full_family(self):
+        categories = self.configure_laptops()
+        self.ai.with_structured_output.return_value.invoke.side_effect = TimeoutError()
+        result = self.search.search("laptops", page_size=6)
+        self.assertEqual(result["fallbackReason"], "ai_timeout")
+        self.assertEqual(result["appliedFilters"]["categories"], categories)
+        self.assertEqual(len(result["products"]), 6)
+
+    def test_explicit_laptop_subtype_stays_narrow(self):
+        self.configure_laptops()
+        self.ai.with_structured_output.return_value.invoke.return_value["categories"] = ["Gaming Laptop"]
+        result = self.search.search("gaming laptop", page_size=6)
+        self.assertEqual(result["appliedFilters"]["categories"], ["Gaming Laptop"])
+        self.assertEqual([p["category"] for p in result["products"]], ["Gaming Laptop"])
+
+    def test_selected_exact_laptops_category_stays_narrow(self):
+        self.configure_laptops()
+        result = self.search.search("laptops", category="Laptops", page_size=6)
+        self.assertEqual(result["appliedFilters"]["categories"], ["Laptops"])
+        self.assertEqual([p["category"] for p in result["products"]], ["Laptops"])
+
+    def test_broad_laptop_request_cannot_infer_the_narrow_category_brand(self):
+        self.configure_laptops()
+        self.search.taxonomy["brandCategories"] = {"Asus": ["Laptops"], "HP": ["Windows Laptop"]}
+        self.ai.with_structured_output.return_value.invoke.return_value["brands"] = ["Asus"]
+        result = self.search.search("laptops", page_size=6)
+        self.assertEqual(result["fallbackReason"], "invalid_ai_output")
+        self.assertEqual(result["appliedFilters"]["brands"], [])
+        self.assertEqual(len(result["products"]), 6)
 
     def test_even_simple_mobile_queries_go_through_llm(self):
         categories = ["Android Smartphone", "iPhone Mobile", "Feature Mobile Phone", "Mobile Accessories"]
@@ -187,6 +266,79 @@ class SmartTests(unittest.TestCase):
         result = self.search.search("Samsung 5 star fridge")
         self.assertEqual(result["fallbackReason"], "ai_provider_failure")
         self.assertNotIn("secret", json.dumps(result))
+
+    def test_remote_protocol_failure_retries_once_and_recovers(self):
+        invoke = self.ai.with_structured_output.return_value.invoke
+        valid = AIInterpretation(brands=["Samsung"], categories=["Double Door Refrigerator", "Single Door Refrigerator"],
+                                 price_min=None, price_max=None, model="", attributes=[], preferences=[], resolutions=[]).model_dump()
+        invoke.side_effect = [httpx.RemoteProtocolError("SECRET_CONNECTION_DETAIL"), valid]
+        with self.assertLogs("smart_search", level="WARNING") as logs:
+            result = self.search.search("Samsung fridge")
+        self.assertEqual(result["interpretationSource"], "ai")
+        self.assertNotIn("fallbackReason", result)
+        self.assertEqual(invoke.call_count, 2)
+        self.assertNotIn("SECRET_CONNECTION_DETAIL", " ".join(logs.output))
+        timeouts = [call.kwargs["timeout"] for call in invoke.call_args_list]
+        self.assertLess(timeouts[1], timeouts[0])
+        self.assertTrue(all(call.kwargs["max_retries"] == 1 for call in invoke.call_args_list))
+
+    def test_repeated_connection_failure_remains_bounded(self):
+        invoke = self.ai.with_structured_output.return_value.invoke
+        invoke.side_effect = httpx.RemoteProtocolError("SECRET_CONNECTION_DETAIL")
+        result = self.search.search("Samsung 5 star fridge")
+        self.assertEqual(result["fallbackReason"], "ai_provider_failure")
+        self.assertEqual(invoke.call_count, 2)
+        self.assertNotIn("SECRET_CONNECTION_DETAIL", json.dumps(result))
+
+    def test_transport_retry_does_not_start_with_insufficient_time(self):
+        invoke = self.ai.with_structured_output.return_value.invoke
+        invoke.side_effect = httpx.RemoteProtocolError("lost connection")
+        with patch("smart_search.ai_timeout", return_value=1.5):
+            result = self.search.search("Samsung 5 star fridge")
+        self.assertEqual(result["fallbackReason"], "ai_provider_failure")
+        self.assertEqual(invoke.call_count, 1)
+
+    def test_wrapped_transport_failure_can_recover(self):
+        invoke = self.ai.with_structured_output.return_value.invoke
+        wrapper = RuntimeError("SDK wrapped the transport failure")
+        wrapper.__cause__ = httpx.RemoteProtocolError("lost connection")
+        valid = AIInterpretation(brands=["Samsung"], categories=["Double Door Refrigerator", "Single Door Refrigerator"],
+                                 price_min=None, price_max=None, model="", attributes=[], preferences=[], resolutions=[]).model_dump()
+        invoke.side_effect = [wrapper, valid]
+        result = self.search.search("Samsung fridge")
+        self.assertNotIn("fallbackReason", result)
+        self.assertEqual(invoke.call_count, 2)
+
+    def test_transport_retry_and_schema_repair_share_two_total_attempts(self):
+        invoke = self.ai.with_structured_output.return_value.invoke
+        invoke.side_effect = [httpx.RemoteProtocolError("lost connection"), {}]
+        result = self.search.search("Samsung fridge")
+        self.assertEqual(result["fallbackReason"], "invalid_ai_output")
+        self.assertEqual(invoke.call_count, 2)
+
+    def test_transport_retry_shares_the_original_caller_deadline(self):
+        invoke = self.ai.with_structured_output.return_value.invoke
+        def respond(*args, **kwargs):
+            if invoke.call_count == 1:
+                raise httpx.RemoteProtocolError("lost connection")
+            time.sleep(2.4)
+            return {}
+        invoke.side_effect = respond
+        with patch("smart_search.ai_timeout", return_value=2.1):
+            started = time.monotonic()
+            result = self.search.search("Samsung fridge")
+        self.assertLess(time.monotonic() - started, 2.3)
+        self.assertEqual(result["fallbackReason"], "ai_timeout")
+        self.assertEqual(invoke.call_count, 2)
+
+    def test_auth_failure_is_not_retried_as_a_transport_error(self):
+        invoke = self.ai.with_structured_output.return_value.invoke
+        request = httpx.Request("POST", "https://example.invalid")
+        invoke.side_effect = httpx.HTTPStatusError("unauthorized", request=request,
+                                                response=httpx.Response(401, request=request))
+        result = self.search.search("Samsung 5 star fridge")
+        self.assertEqual(result["fallbackReason"], "ai_provider_failure")
+        self.assertEqual(invoke.call_count, 1)
 
     def test_unknown_brand_mapping_rejected(self):
         value = Interpretation(brands=["Invented"], categories=[], price_min=None, price_max=None,
@@ -389,6 +541,124 @@ class SemanticInterpretationTests(unittest.TestCase):
             self.search.interpret("smart phone under 35000", self.taxonomy)
         self.assertEqual(self.ai.with_structured_output.return_value.invoke.call_count, 4)
 
+    def test_concurrent_identical_queries_share_one_ai_call(self):
+        self.output([self.mapping("smart phone", "category", "Android Smartphone", "iPhone Mobile")])
+        invoke = self.ai.with_structured_output.return_value.invoke
+        value = invoke.return_value
+        started, release = threading.Event(), threading.Event()
+        barrier = threading.Barrier(6)
+
+        def respond(*args, **kwargs):
+            started.set()
+            if not release.wait(2):
+                raise RuntimeError("Test provider did not release")
+            return value
+
+        def request():
+            barrier.wait(2)
+            return self.search.interpret("smart phone under 35000", self.taxonomy)
+
+        invoke.side_effect = respond
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futures = [pool.submit(request) for _ in range(6)]
+            self.assertTrue(started.wait(2))
+            release.set()
+            results = [f.result(timeout=3) for f in futures]
+        self.assertEqual(invoke.call_count, 1)
+        self.assertTrue(all(r[3] is None for r in results))
+        results[0][0].categories.clear()
+        self.assertTrue(all(r[0].categories for r in results[1:]))
+
+    def test_provider_failure_does_not_poison_next_request(self):
+        self.output([self.mapping("smart phone", "category", "Android Smartphone", "iPhone Mobile")])
+        invoke = self.ai.with_structured_output.return_value.invoke
+        invoke.side_effect = [RuntimeError("Provider down"), invoke.return_value]
+        first = self.search.interpret("smart phone under 35000", self.taxonomy)
+        second = self.search.interpret("smart phone under 35000", self.taxonomy)
+        self.assertEqual(first[3], "ai_provider_failure")
+        self.assertEqual((second[3], second[4]), (None, "ai"))
+        self.assertEqual(invoke.call_count, 2)
+
+    def test_catalogue_family_context_is_derived_for_new_category_names(self):
+        categories = ["Compact Widget", "Pro Widget", "Widgets", "Widget Covers"]
+        taxonomy = {**self.taxonomy, "categories": categories}
+        families = category_families(categories)
+        self.assertEqual(families["widget"], ["Compact Widget", "Pro Widget", "Widgets"])
+        self.assertNotIn("Widget Covers", families["widget"])
+        prompt = interpretation_prompt("widgets", taxonomy, [], "family")
+        self.assertIn('"ambiguousSourceCategories": ["Widgets"]', prompt)
+        self.assertIn('"categoryFamilies"', prompt)
+
+    def test_semantic_property_can_select_category_without_literal_hinglish_filter(self):
+        taxonomy = {**self.taxonomy, "categories": ["Thin & Light Laptop", "Gaming Laptop", "Windows Laptop"]}
+        self.output([self.mapping("halka", "category", "Thin & Light Laptop"),
+                     self.mapping("office ke liye", "preference", "office")],
+                    categories=["Thin & Light Laptop"], price_max=50000, preferences=["office"])
+        intent, _, _, fallback, source = self.search.interpret(
+            "office ke liye halka laptop 50 hazar tak", taxonomy)
+        self.assertEqual((fallback, source), (None, "ai"))
+        self.assertEqual(intent.categories, ["Thin & Light Laptop"])
+        self.assertEqual(intent.attributes, [])
+
+    def test_subtype_resolution_cannot_leave_other_family_members_in_results(self):
+        taxonomy = {**self.taxonomy, "categories": ["Thin & Light Laptop", "Gaming Laptop", "Windows Laptop"]}
+        self.output([self.mapping("halka", "category", "Thin & Light Laptop")],
+                    categories=taxonomy["categories"], price_max=None)
+        result = self.search.interpret("halka laptop", taxonomy)
+        self.assertEqual(result[3], "invalid_ai_output")
+
+    def test_family_and_property_evidence_accepts_ai_selected_intersection(self):
+        taxonomy = {**self.taxonomy, "categories": ["Thin & Light Laptop", "Gaming Laptop", "Windows Laptop"]}
+        self.output([self.mapping("halka", "category", "Thin & Light Laptop"),
+                     self.mapping("laptop", "category", *taxonomy["categories"])],
+                    categories=["Thin & Light Laptop"], price_max=None)
+        result = self.search.interpret("halka laptop", taxonomy)
+        self.assertEqual((result[0].categories, result[3], result[4]), (["Thin & Light Laptop"], None, "ai"))
+        self.assertEqual(self.ai.with_structured_output.return_value.invoke.call_count, 1)
+
+    def test_provider_schema_restricts_brand_and_category_labels_to_catalogue(self):
+        schema = provider_schema(self.taxonomy)
+        for field in ("brands", "categories"):
+            self.assertEqual(schema["properties"][field]["items"]["enum"], self.taxonomy[field])
+
+    def test_large_catalogue_keeps_provider_schema_simple(self):
+        taxonomy = {"brands": [f"Brand {i}" for i in range(114)],
+                    "categories": [f"Category {i}" for i in range(124)]}
+        schema = provider_schema(taxonomy)
+        for field in ("brands", "categories"):
+            self.assertNotIn("enum", schema["properties"][field]["items"])
+
+    def test_label_formatting_is_canonicalized_without_semantic_rewriting(self):
+        self.output([self.mapping("smart phone", "category", "AndroidSmartphone")],
+                    categories=["android smartphone"], price_max=None)
+        result = self.search.interpret("smart phone", self.taxonomy)
+        self.assertEqual((result[0].categories, result[3]), (["Android Smartphone"], None))
+
+    def test_unknown_category_is_not_corrected_by_fuzzy_label_matching(self):
+        self.output([self.mapping("smart phone", "category", "Imaginary Smartphone")],
+                    categories=["Imaginary Smartphone"], price_max=None)
+        self.assertEqual(self.search.interpret("smart phone", self.taxonomy)[3], "invalid_ai_output")
+
+    def test_known_empty_brand_category_is_repaired_by_ai(self):
+        self.taxonomy["brandCategories"] = {"Voltas": ["Wall Mounted Split AC"],
+                                          "Voltas Beko": ["Front Load Washing Machine"]}
+        self.output([self.mapping("voltas", "brand", "Voltas Beko")], brands=["Voltas Beko"],
+                    categories=["Front Load Washing Machine"], price_max=None)
+        invoke = self.ai.with_structured_output.return_value.invoke
+        valid = invoke.return_value
+        invoke.side_effect = [{**valid, "brands": ["Voltas"], "resolutions": []}, valid]
+        result = self.search.interpret("voltas washing machine", self.taxonomy)
+        self.assertEqual((result[0].brands, result[3]), (["Voltas Beko"], None))
+        self.assertEqual(invoke.call_count, 2)
+        self.assertIn("Known-empty brand/category pair", invoke.call_args.args[0][0].content)
+
+    def test_exact_mode_permits_empty_pair_without_compound_substitution(self):
+        self.taxonomy["brandCategories"] = {"Voltas": ["Wall Mounted Split AC"],
+                                          "Voltas Beko": ["Front Load Washing Machine"]}
+        self.output([], brands=["Voltas"], categories=["Front Load Washing Machine"], price_max=None)
+        result = self.search.interpret("voltas washing machine", self.taxonomy, brand_match="exact")
+        self.assertEqual((result[0].brands, result[3], result[4]), (["Voltas"], None, "ai"))
+
     def test_native_schema_inlines_nested_refs_but_backend_keeps_limits(self):
         schema = provider_schema()
         self.assertNotIn("$ref", json.dumps(schema))
@@ -401,7 +671,7 @@ class SemanticInterpretationTests(unittest.TestCase):
         self.assertEqual(self.search.interpret("smart phone under 35000", self.taxonomy)[3], "invalid_ai_output")
 
     def test_cache_expires_and_namespace_changes_invalidate_it(self):
-        self.output([self.mapping("smart phone", "category", "Android Smartphone")])
+        self.output([self.mapping("smart phone", "category", "Android Smartphone")], categories=["Android Smartphone"])
         with patch("smart_search.time.monotonic", return_value=100):
             self.search.interpret("smart phone under 35000", self.taxonomy)
         with patch("smart_search.time.monotonic", return_value=401):
@@ -415,11 +685,15 @@ class SemanticInterpretationTests(unittest.TestCase):
         self.output([self.mapping("smart phone", "category", "Android Smartphone")], attributes=["16GB RAM"])
         self.assertEqual(self.search.interpret("smart phone under 35000", self.taxonomy)[3], "invalid_ai_output")
 
-    def test_short_caller_deadline_keeps_provider_http_minimum(self):
+    def test_provider_request_uses_remaining_caller_budget(self):
         self.output([self.mapping("smart phone", "category", "Android Smartphone")])
         with patch.dict(os.environ, {"SMART_SEARCH_AI_TIMEOUT": "1"}):
             self.search.interpret("smart phone under 35000", self.taxonomy)
-        self.assertEqual(self.ai.with_structured_output.return_value.invoke.call_args.kwargs["timeout"], 10)
+        timeout = self.ai.with_structured_output.return_value.invoke.call_args.kwargs["timeout"]
+        self.assertGreater(timeout, 0)
+        self.assertLessEqual(timeout, 1)
+        headers = self.ai.with_structured_output.return_value.invoke.call_args.kwargs["http_options"]["headers"]
+        self.assertEqual(headers["X-Server-Timeout"], "10")
 
     def test_llm_selects_compound_brand_using_catalogue_pairs(self):
         self.taxonomy["brandCategories"] = {"Voltas": ["Wall Mounted Split AC"],

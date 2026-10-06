@@ -85,10 +85,14 @@ class LiveTests(unittest.TestCase):
     def test_boundary_is_inclusive(self):
         self.assertEqual(len(self.run_search(live(price=35000), price_max=35000)[0]), 1)
 
-    def test_api_failure_hides_old_price_and_marks_stock_unknown(self):
+    def test_api_failure_shows_labelled_catalogue_price_and_marks_stock_unknown(self):
         _, response, _ = self.run_search({"error": "unavailable"})
         card = response["products"][0]
         self.assertEqual(card["product_mrp"], "Price unavailable")
+        self.assertEqual(card["catalogue_price"], 36999)
+        self.assertTrue(card["catalogue_fallback"])
+        self.assertEqual(card["price_source"], "sql_snapshot")
+        self.assertIn("verification_notice", response)
         self.assertNotIn("selling_price", card)
         self.assertEqual(card["instock"], "Unknown")
         self.assertEqual(card["snapshot_instock"], "Yes")
@@ -100,6 +104,34 @@ class LiveTests(unittest.TestCase):
         _, response, _ = self.run_search({"error": "unavailable"}, price_max=35000)
         self.assertEqual(response["error_code"], "price_unverified")
         self.assertEqual(response["products"], [])
+
+    def test_api_failure_returns_catalogue_budget_options_without_live_guarantee(self):
+        _, response, _ = self.run_search({"error": "unavailable"}, price_max=38000)
+        self.assertNotIn("error", response)
+        self.assertEqual(response["products"][0]["catalogue_price"], 36999)
+        self.assertFalse(response["products"][0]["price_verified"])
+        self.assertFalse(response["products"][0]["stock_verified"])
+        self.assertTrue(response["products"][0]["product_url"].startswith("https://www.lotuselectronics.com/product/"))
+
+    def test_partial_failure_keeps_verified_and_catalogue_cards_separate(self):
+        self.search.index.query.return_value.matches.append(SimpleNamespace(id="2", score=.8, metadata=metadata("2")))
+        with patch("tools.Product_details.fetch_live_details", side_effect=lambda pid, city: live(pid=pid) if pid == 1 else {"error": "down"}):
+            results = self.search.search_products("fridge", price_max=38000)
+            response = json.loads(self.search.format_results(results))
+        verified, fallback = response["products"]
+        self.assertTrue(verified["price_verified"])
+        self.assertNotIn("catalogue_fallback", verified)
+        self.assertFalse(fallback["price_verified"])
+        self.assertEqual(response["live_verification"]["catalogue_fallback_count"], 1)
+
+    def test_budget_fallback_uses_remaining_retrieved_candidates_without_more_api_calls(self):
+        self.search.index.query.return_value.matches = [SimpleNamespace(id=str(pid), score=.9, metadata=metadata(str(pid), 36999 if pid == 11 else 60000)) for pid in range(1, 12)]
+        with patch("tools.Product_details.fetch_live_details", return_value={"error": "down"}) as fetch:
+            results = self.search.search_products("fridge", top_k=6, price_max=38000)
+        self.assertEqual([r["product_id"] for r in results], ["11"])
+        self.assertFalse(results[0]["price_verified"])
+        self.assertTrue(results[0]["catalogue_fallback"])
+        self.assertEqual(fetch.call_count, 10)
 
     def test_identity_and_location_mismatch_fail_closed(self):
         for detail in (live(pid=2), live(product_sku="OTHER"), live(city="BHOPAL"),
@@ -177,6 +209,22 @@ class LiveTests(unittest.TestCase):
         fetch.assert_called_once()
         duplicate.assert_not_called()
 
+    def test_in_stock_request_can_show_unconfirmed_catalogue_alternatives_on_api_failure(self):
+        with patch("tools.recommend_products.product_search_instance", self.search), \
+             patch("tools.Product_details.fetch_live_details", return_value={"error": "down"}):
+            result = recommend_products_tool.invoke({"category": "fridge", "in_stock_only": True, "budget": 38000})
+        self.assertEqual(result["products"], [])
+        self.assertEqual(result["catalogue_products"][0]["catalogue_price"], 36999)
+        self.assertFalse(result["catalogue_products"][0]["stock_verified"])
+
+    def test_verified_out_of_stock_is_not_a_catalogue_fallback(self):
+        with patch("tools.recommend_products.product_search_instance", self.search), \
+             patch("tools.Product_details.fetch_live_details", return_value=live(stock="No")):
+            result = recommend_products_tool.invoke({"category": "fridge", "in_stock_only": True, "budget": 38000})
+        self.assertEqual(result["error_code"], "no_verified_matches")
+        self.assertNotIn("catalogue_products", result)
+        self.assertNotIn("verification_notice", result)
+
     def test_browse_and_recommend_preserve_budget_failure(self):
         with patch("tools.browse_catalog.product_search_instance", self.search), \
              patch("tools.recommend_products.product_search_instance", self.search), \
@@ -193,13 +241,15 @@ class LiveTests(unittest.TestCase):
         self.assertEqual(result["selling_price_a"], 34999.50)
         self.assertTrue(all(c.args[0]["city"] == "BHOPAL" for c in details.invoke.call_args_list))
 
-    def test_direct_details_fallback_hides_snapshot_price(self):
+    def test_direct_details_fallback_preserves_catalogue_price_and_product_link(self):
         with patch("tools.Product_details.fetch_live_details", return_value={"error": "unavailable"}), \
              patch("tools.product_search_tool.product_search_instance") as search:
             search.get_product_record.return_value = self.search._record("1", metadata())
             detail = get_filtered_product_details_tool.invoke({"product_id": 1})
         self.assertFalse(detail["price_verified"])
-        self.assertEqual(detail["product_mrp"], "Price unavailable")
+        self.assertEqual(detail["catalogue_price"], 36999)
+        self.assertTrue(detail["catalogue_fallback"])
+        self.assertTrue(detail["product_url"])
         self.assertNotIn("selling_price", detail)
 
     def test_search_endpoint_city_and_unavailable_status(self):
@@ -216,6 +266,31 @@ class LiveTests(unittest.TestCase):
 
 
 class CardTests(unittest.TestCase):
+    def test_fallback_cards_and_popup_survive_generic_model_apology(self):
+        fact = {"product_id": "1", "product_name": "Indexed laptop", "catalogue_price": 47990,
+                "product_url": "https://www.lotuselectronics.com/product/indexed-laptop/1",
+                "catalogue_fallback": True, "price_verified": False, "stock_verified": False}
+        messages = [HumanMessage(content="available laptops"),
+                    ToolMessage(content=json.dumps({"products": [], "catalogue_products": [fact]}),
+                                name="recommend_products", tool_call_id="now")]
+        result = normalize_live_response({"answer": "Sorry; try some TUF above budget.", "products": [], "recommendations": []}, collect_live_products(messages))
+        self.assertEqual(result["products"], [fact])
+        self.assertEqual(result["verification_notice"]["title"], "Verify live price & stock")
+        self.assertNotIn("TUF", result["answer"])
+        self.assertIn("last-known", result["answer"])
+
+    def test_verified_result_cannot_invent_a_failure_popup(self):
+        result = normalize_live_response({"answer": "Verified", "products": [live()], "verification_notice": {"title": "fake"}}, {"1": live()})
+        self.assertEqual(result["answer"], "Verified")
+        self.assertNotIn("verification_notice", result)
+
+    def test_model_cannot_invent_catalogue_price_or_fallback_without_backend_facts(self):
+        result = normalize_live_response({"products": [{"product_id": "fake", "catalogue_price": 100,
+                                                        "catalogue_fallback": True}]}, {})
+        self.assertNotIn("catalogue_price", result["products"][0])
+        self.assertNotIn("catalogue_fallback", result["products"][0])
+        self.assertNotIn("verification_notice", result)
+
     def test_chat_persists_verified_card_instead_of_model_price(self):
         fact = live()
         def run(message, session_id, *, actions):

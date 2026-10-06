@@ -296,3 +296,13 @@ body.assistant-page { display:block; animation:none; }
 .bulk-enquiry-details dt { color: #667085; font-weight: 400; }
 .bulk-enquiry-details dd { margin: 0; }
 .bulk-enquiry-notice { margin: 14px 0 0; font-size: 12px; line-height: 1.5; color: #667085; }
+.product-verification-note { margin: 0; padding: 0 18px 14px; color: #8b651c; font-size: 12px; line-height: 1.5; }
+.product-pricing-catalogue .price-label { color: #8b651c; }
+.verification-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 28px; overflow-y: auto; border: 1px solid #e8dfca; border-radius: 20px; background: #fff; color: #1d2939; box-shadow: 0 24px 80px #18233833; }
+.verification-dialog::backdrop { background: #17223980; }
+.verification-dialog-icon { display: grid; place-items: center; width: 42px; height: 42px; margin-bottom: 16px; border-radius: 50%; background: #fff3d7; color: #926411; font-size: 24px; font-weight: 700; }
+.verification-dialog h2 { margin: 0 0 12px; font-size: 20px; line-height: 1.35; font-weight: 700; }
+.verification-dialog p { margin: 0 0 22px; color: #667085; font-size: 14px; line-height: 1.7; }
+.verification-dialog-dismiss { width: 100%; padding: 12px 18px; border: 0; border-radius: 10px; background: #4263b6; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.verification-dialog-dismiss:hover { background: #34519a; }
+.verification-dialog-dismiss:focus-visible { outline: 3px solid #97abdf; outline-offset: 3px; }
