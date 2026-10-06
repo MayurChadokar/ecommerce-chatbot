@@ -51,6 +51,28 @@ class CategoryResolverTests(unittest.TestCase):
             records.append(record)
         self.catalogue.index.query.return_value.matches = records
 
+    def test_every_catalogue_brand_in_all_category_searches_without_ai(self):
+        for brand in self.taxonomy["brands"]:
+            with self.subTest(brand=brand):
+                categories = self.taxonomy["brandCategories"][brand]
+                rows = [("1", categories[0] if categories else "", brand + " first product", brand),
+                        ("2", categories[-1] if categories else "", brand + " second product", brand)]
+                self.records(*rows)
+                self.output([], brands=[brand])
+                invoke = self.ai.with_structured_output.return_value.invoke
+                valid = invoke.return_value
+                invoke.side_effect = [{**valid, "category_status": "unsupported"}, valid]
+                result = self.search.search(brand, category="all")
+                self.assertEqual({p["product_id"] for p in result["products"]}, {"1", "2"})
+                self.assertEqual({p["category"] for p in result["products"]},
+                                 {categories[0], categories[-1]} if categories else {""})
+                self.assertEqual(result["appliedFilters"]["brands"], [brand])
+                self.assertEqual(result["appliedFilters"]["categories"], [])
+                self.assertNotIn("category", self.catalogue.index.query.call_args.kwargs["filter"])
+                self.assertNotIn("fallbackReason", result)
+                self.assertEqual(result["interpretationSource"], "catalogue")
+                self.ai.with_structured_output.assert_not_called()
+
     def subtype(self, name, attributes=None, **extra):
         scope = self.categories.describe(name)
         attrs = attributes or scope["requiredTerms"]

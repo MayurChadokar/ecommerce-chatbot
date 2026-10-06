@@ -59,6 +59,63 @@ class SmartTests(unittest.TestCase):
             self.search.search("electronics", category="all")
         self.assertNotIn("category", self.catalogue.index.query.call_args.kwargs["filter"])
 
+    def test_brand_only_all_searches_multiple_categories_without_ai(self):
+        refrigerator = match("1")
+        laptop = match("2", name="Samsung Windows Laptop")
+        laptop.metadata["category"] = "Windows Laptop"
+        competitor = match("3", brand="LG")
+        self.catalogue.index.query.return_value.matches = [refrigerator, laptop, competitor]
+        valid = dict(brands=["Samsung"], categories=[], price_min=None, price_max=50000,
+                     model="", attributes=[], preferences=[], resolutions=[])
+        for status in ("unsupported", "ambiguous"):
+            with self.subTest(status=status):
+                search = SmartSearch(self.catalogue, self.ai, TAXONOMY, self.verifier)
+                invoke = self.ai.with_structured_output.return_value.invoke
+                invoke.side_effect = [{**valid, "category_status": status}, valid]
+                result = search.search("Samsung under 50000", category="all")
+                self.assertEqual({p["product_id"] for p in result["products"]}, {"1", "2"})
+                filters = self.catalogue.index.query.call_args.kwargs["filter"]
+                self.assertEqual(filters["brand"], {"$in": ["Samsung"]})
+                self.assertNotIn("category", filters)
+                self.assertEqual(result["appliedFilters"]["price_max"], 50000)
+                self.assertEqual(result["categoryResolution"]["status"], "resolved")
+                self.assertFalse(result["clarificationRequired"])
+                self.assertNotIn("fallbackReason", result)
+                self.assertEqual(result["interpretationSource"], "catalogue")
+                self.ai.with_structured_output.assert_not_called()
+
+    def test_brand_only_all_does_not_infer_a_category_from_the_brand(self):
+        valid = dict(brands=["Samsung"], categories=[], price_min=None, price_max=None,
+                     model="", attributes=[], preferences=[], resolutions=[])
+        narrowed = {**valid, "categories": ["Double Door Refrigerator"],
+                    "resolutions": [{"source": "Samsung", "kind": "category",
+                                     "values": ["Double Door Refrigerator"]}]}
+        self.ai.with_structured_output.return_value.invoke.side_effect = [narrowed, valid]
+        result = self.search.search("Samsung", category="all", brand_match="exact")
+        self.assertEqual(len(result["products"]), 1)
+        self.assertEqual(result["appliedFilters"]["categories"], [])
+        self.assertNotIn("category", self.catalogue.index.query.call_args.kwargs["filter"])
+        self.assertEqual(result["brandResolution"]["appliedBrands"], ["Samsung"])
+
+    def test_brand_only_all_still_searches_when_ai_is_unavailable(self):
+        self.ai.with_structured_output.side_effect = RuntimeError("Provider unavailable")
+        result = self.search.search("Samsung", category="all")
+        self.assertEqual(len(result["products"]), 1)
+        self.assertNotIn("fallbackReason", result)
+        self.assertEqual(result["interpretationSource"], "catalogue")
+        self.ai.with_structured_output.assert_not_called()
+        self.assertNotIn("category", self.catalogue.index.query.call_args.kwargs["filter"])
+
+    def test_brand_with_unknown_product_function_still_stops_before_retrieval(self):
+        self.ai.with_structured_output.return_value.invoke.return_value = dict(
+            brands=["Samsung"], categories=[], price_min=None, price_max=None,
+            model="", attributes=["imaginary", "device"], preferences=[],
+            resolutions=[], category_status="unsupported")
+        result = self.search.search("Samsung imaginary device", category="all")
+        self.assertEqual(result["products"], [])
+        self.assertEqual(result["categoryResolution"]["status"], "unavailable")
+        self.catalogue.index.query.assert_not_called()
+
     def test_unknown_or_conflicting_category_clarifies_without_querying_index(self):
         for query, category in [("Samsung", "Imaginary category"),
                                 ("gaming laptop", "Double Door Refrigerator")]:
@@ -234,6 +291,34 @@ class SmartTests(unittest.TestCase):
         self.assertTrue(result["verification"]["complete"])
         self.assertIn("out of stock", result["message"])
 
+    def test_available_brand_product_after_sold_out_first_page_is_returned(self):
+        self.catalogue.index.query.return_value.matches = [match(str(i)) for i in range(1, 27)]
+        self.fetch.side_effect = lambda pid, city: {
+            **detail(pid, city), **availability_fields("Yes" if int(pid) > 24 else "No", live=True, city=city)}
+        result = self.search.search("Samsung", category="all")
+        self.assertEqual([p["product_id"] for p in result["products"]], ["25", "26"])
+        self.assertEqual(result["pagination"]["evaluatedCandidates"], 26)
+        self.assertFalse(result["pagination"]["hasMoreCandidates"])
+        self.assertEqual(result["verification"]["outOfStockCount"], 24)
+
+    def test_verified_pages_do_not_skip_or_repeat_available_products(self):
+        self.catalogue.index.query.return_value.matches = [match(str(i)) for i in range(1, 8)]
+        self.fetch.side_effect = lambda pid, city: {
+            **detail(pid, city), **availability_fields("Yes" if int(pid) % 2 == 0 else "No", live=True, city=city)}
+        first = self.search.search("Samsung", category="all", page_size=2)
+        second = self.search.search("Samsung", category="all", page=2, page_size=2)
+        self.assertEqual([p["product_id"] for p in first["products"]], ["2", "4"])
+        self.assertEqual([p["product_id"] for p in second["products"]], ["6"])
+        self.assertEqual(first["pagination"]["nextPage"], 2)
+        self.assertIsNone(second["pagination"]["nextPage"])
+
+    def test_later_current_price_budget_matches_fill_the_page(self):
+        self.catalogue.index.query.return_value.matches = [match(str(i)) for i in range(1, 6)]
+        self.fetch.side_effect = lambda pid, city: detail(pid, city, 50001 if int(pid) < 4 else 39999)
+        result = self.search.search("Samsung under 40000", category="all", page_size=2)
+        self.assertEqual([p["product_id"] for p in result["products"]], ["4", "5"])
+        self.assertEqual(result["appliedFilters"]["price_max"], 40000)
+
     def test_strict_budget_excludes_even_one_rupee_over(self):
         self.fetch.side_effect = lambda pid, city: detail(pid, city, 40001)
         result = self.search.search("Samsung fridge under 40k")
@@ -296,7 +381,8 @@ class SmartTests(unittest.TestCase):
         self.assertEqual(invoke.call_count, 2)
         self.assertNotIn("SECRET_CONNECTION_DETAIL", " ".join(logs.output))
         timeouts = [call.kwargs["timeout"] for call in invoke.call_args_list]
-        self.assertLess(timeouts[1], timeouts[0])
+        # An immediate mocked retry can land on the same Windows clock tick.
+        self.assertLessEqual(timeouts[1], timeouts[0])
         self.assertTrue(all(call.kwargs["max_retries"] == 1 for call in invoke.call_args_list))
 
     def test_repeated_connection_failure_remains_bounded(self):

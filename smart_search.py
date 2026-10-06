@@ -302,6 +302,9 @@ def interpretation_prompt(query, taxonomy, unresolved, brand_match):
         "A known unindexed subtype (matchType attribute) must keep its distinctive properties as factual attributes "
         "while searching the supplied parent scope: Linux stays linux, 8K stays 8k, smart stays smart. "
         "4K/8K in TV requests is resolution, not money; only explicit money wording makes it a budget. "
+        "Category is optional. When the request names only brands, optionally with a budget, "
+        "search those brands across all categories: leave categories empty and set category_status supported. "
+        "Do not infer a product category from a brand or mark the absence of a category ambiguous/unsupported. "
         "Set category_status supported for a clear category, ambiguous for multiple plausible functions, "
         "unsupported for an unknown/nonexistent function. For unsupported requests preserve unknown wording "
         "as literal attributes; do not invent a mapping to unrelated products. "
@@ -478,6 +481,13 @@ def spec_tokens(text):
 def merge_interpretation(base, parsed, query, taxonomy, brand_match="family"):
     """Consume grounded LLM mappings instead of reappending all original words."""
     catalogue = CategoryCatalogue(taxonomy)
+
+    # A known brand (with an optional budget) needs no product-type decision.
+    # Repair a provider's category requirement instead of caching an empty
+    # unavailable response or silently narrowing the brand to one product type.
+    if base.brands and not (base.categories or base.attributes or base.preferences):
+        if parsed.category_status != "supported" or parsed.categories:
+            raise GroundingError("A brand-only request must be supported without a category filter")
 
     def category_evidence(values):
         labels = set()
@@ -710,6 +720,10 @@ class SmartSearch:
             # Let the LLM resolve conversational/multiple category mentions;
             # lexical parsing is a safety guard, not the semantic decision-maker.
             base, normalized, corrections = deterministic(query, {**taxonomy, "categories": [], "categoryTree": []})
+        # Catalogue brand identity is already exact. A brand-only request must
+        # not depend on a provider deciding which product category it belongs to.
+        if base.brands and not (base.categories or base.attributes or base.preferences):
+            return base, normalized, corrections, None, "catalogue"
         key = (self.catalogue.settings.namespace, taxonomy["version"], normalize(query), brand_match)
         with self._cache_lock:
             cached = self._interpretations.get(key)
@@ -948,22 +962,29 @@ class SmartSearch:
         related_eligible.sort(key=rank)
         eligible = eligible[:self.WINDOW]
         start = (page - 1) * page_size
-        candidates = eligible[start:start + page_size]
-        verified = []
+        target = start + page_size
+        candidates = []
+        matched = []
         unknown = 0
         stock_unknown = 0
         out_of_stock = 0
-        # Reuse the existing verifier in its supported batches of <=20. No price cache.
-        for offset in range(0, len(candidates), 20):
-            batch = self.verifier(candidates[offset:offset + 20], top_k=min(20, len(candidates)-offset),
+        # Page the verified matches, not raw candidates: sold-out or over-budget
+        # products must not hide later available matches behind an empty page.
+        # Recheck the prefix for numbered pages; live prices/stock are not cached.
+        while len(candidates) < len(eligible) and len(matched) < target:
+            size = min(20, target - len(matched), len(eligible) - len(candidates))
+            chunk = eligible[len(candidates):len(candidates) + size]
+            candidates.extend(chunk)
+            batch = self.verifier(chunk, top_k=size,
                                   city=city, price_min=intent.price_min, price_max=intent.price_max)
             unknown += batch.verification["price_unverified_count"]
             stock_unknown += batch.verification["stock_unverified_count"]
             out_of_stock += batch.verification.get("out_of_stock_count", 0)
-            verified.extend(batch)
-        if candidates and unknown == len(candidates) and not verified:
+            matched.extend(batch)
+        verified = matched[start:target]
+        if candidates and unknown == len(candidates) and not matched:
             raise SearchUnavailable("Current product prices unavailable; try again later")
-        if not verified and unknown:
+        if not matched and unknown:
             raise SearchUnavailable("Cannot confirm budget matches while current prices are unavailable")
         alternatives = []
         alternative_verification = None
@@ -991,12 +1012,12 @@ class SmartSearch:
         elif not verified:
             category_notice = (
                 f"The matching products checked are currently out of stock in {city}. Try another page or search."
-                if out_of_stock else
+                if out_of_stock and not matched else
                 "No products matching all your requirements were found in the searched catalogue window."
             )
         elif requested_category and resolution["matchType"] in {"family", "equivalent", "semantic", "attribute"}:
             category_notice = f"Interpreted '{requested_category}' within the matching catalogue categories."
-        more = start + page_size < len(eligible)
+        more = len(candidates) < len(eligible)
         result = {
             "query": query, "selectedCategory": category.strip(), "normalizedQuery": normalize(query), "products": [card(r) for r in verified],
             "alternatives": alternatives, "clarificationRequired": False,
