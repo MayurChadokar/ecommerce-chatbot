@@ -31,7 +31,8 @@ def browse_catalog_tool(
     Do not use this to bypass search errors: it uses the same Pinecone index.
     """
     query = category or "electronics appliances"
-    results = product_search_instance.search_products(query, top_k=6, price_max=budget, city=city)
+    results = product_search_instance.search_products(query, top_k=6, price_max=budget,
+                                                      city=city, category=category)
     response = json.loads(product_search_instance.format_results(results, query, price_max=budget))
     if response.get("error"):
         return response

@@ -5,6 +5,7 @@ import math
 import json
 import os
 import threading
+import time
 
 from product_availability import availability_fields
 from product_index import product_url
@@ -89,31 +90,7 @@ def enrich(records, *, top_k, city, price_min=None, price_max=None, fetch=None):
         fetch = fetch_live_details
     # Overfetch a few candidates for live budget checks, never scan the catalogue.
     candidates = records[:min(20, max(top_k, 10))]
-    pending = {}
     details = {}
-    for position, record in enumerate(candidates):
-        if not _slots.acquire(blocking=False):
-            continue
-        try:
-            future = _pool.submit(fetch, int(record["product_id"]), city)
-            future.add_done_callback(lambda _: _slots.release())
-            pending[future] = position
-        except Exception:
-            _slots.release()
-    if pending:
-        done, unfinished = wait(pending, timeout=deadline_seconds())
-        for future in done:
-            try:
-                details[pending[future]] = future.result()
-            except Exception:
-                pass
-        for future in unfinished:
-            future.cancel()
-        # Do not wait for slow requests. Running calls have HTTP timeouts and
-        # retain their capacity slot until actually finished; no unbounded queue.
-    merged = [merge_live(record, details.get(i), city) for i, record in enumerate(candidates)]
-    unknown_price = sum(not r["price_verified"] for r in merged)
-    unknown_stock = sum(not r["stock_verified"] for r in merged)
     budget = price_min is not None or price_max is not None
     def budget_match(record):
         # A catalogue price can suggest options during an outage, never confirm
@@ -121,10 +98,41 @@ def enrich(records, *, top_k, city, price_min=None, price_max=None, fetch=None):
         price = record["price"] if record["price_verified"] else record.get("catalogue_price")
         return price is not None and (price_min is None or price >= price_min) and (price_max is None or price <= price_max)
 
-    # Discovery must not recommend products the current API confirms are sold out.
-    # Unverified catalogue fallbacks keep their explicit unknown-stock labels.
-    filtered = [r for r in merged if r["availability_status"] != "out_of_stock"
-                and (not budget or budget_match(r))]
+    deadline = time.monotonic() + deadline_seconds()
+    batch_start = 0
+    while True:
+        pending = {}
+        for position in range(batch_start, len(candidates)):
+            if time.monotonic() >= deadline or not _slots.acquire(blocking=False):
+                continue
+            try:
+                future = _pool.submit(fetch, int(candidates[position]["product_id"]), city)
+                future.add_done_callback(lambda _: _slots.release())
+                pending[future] = position
+            except Exception:
+                _slots.release()
+        if pending:
+            done, unfinished = wait(pending, timeout=max(0, deadline - time.monotonic()))
+            for future in done:
+                try:
+                    details[pending[future]] = future.result()
+                except Exception:
+                    pass
+            for future in unfinished:
+                future.cancel()
+        # All batches share one deadline and the existing worker capacity.
+        merged = [merge_live(record, details.get(i), city) for i, record in enumerate(candidates)]
+        unknown_price = sum(not r["price_verified"] for r in merged)
+        unknown_stock = sum(not r["stock_verified"] for r in merged)
+        filtered = [r for r in merged if r["availability_status"] != "out_of_stock"
+                    and (not budget or budget_match(r))]
+        if (len(filtered) >= top_k or unknown_price or unknown_stock
+                or len(candidates) >= min(20, len(records)) or time.monotonic() >= deadline):
+            break
+        # Sold-out or over-budget first results must not hide a suitable later
+        # candidate. Continue within the already retrieved set, capped at 20.
+        batch_start = len(candidates)
+        candidates.extend(records[batch_start:min(20, batch_start + 10)])
     if budget and unknown_price and not filtered:
         # During an outage, also use the remaining already-retrieved Pinecone
         # candidates. No additional API calls or catalogue-wide scan are made.
@@ -134,14 +142,23 @@ def enrich(records, *, top_k, city, price_min=None, price_max=None, fetch=None):
         unknown_price += len(extra)
         unknown_stock += len(extra)
     error = "Current prices could not be verified for some candidates; budget matches are incomplete." if budget and unknown_price and not filtered else None
-    return LiveResults(filtered[:top_k], {
+    verification = {
         "enabled": True, "city": city, "candidate_count": len(candidates),
         "price_unverified_count": unknown_price, "stock_unverified_count": unknown_stock,
         "out_of_stock_count": sum(r["availability_status"] == "out_of_stock" for r in merged),
         "complete": unknown_price == 0 and unknown_stock == 0,
         "catalogue_fallback_count": sum(bool(r.get("catalogue_fallback")) for r in filtered[:top_k]),
         "scope": "retrieved_candidates_only", "cached": False,
-    }, error)
+    }
+    if price_max is not None:
+        above_budget = [r for r in merged if r["price_verified"] and r["stock_verified"]
+                        and r["availability_status"] == "in_stock" and r["price"] > price_max]
+        if above_budget:
+            nearest = min(above_budget, key=lambda r: r["price"])
+            verification["nearest_above_budget"] = {
+                key: nearest[key] for key in ("product_id", "product_name", "selling_price", "stock_city")
+            }
+    return LiveResults(filtered[:top_k], verification, error)
 
 
 def live_card_fields(record):

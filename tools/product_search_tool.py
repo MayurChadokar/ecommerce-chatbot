@@ -4,6 +4,8 @@ import logging
 import math
 import os
 import re
+from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field
 from langchain_core.tools import tool
@@ -15,8 +17,17 @@ from live_product_enrichment import enabled as live_enabled, enrich, live_card_f
 logger = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=4)
+def _category_vocabulary(path):
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
 class ProductSearchInput(BaseModel):
     query: str = Field(description="Product description, brand or category to search")
+    category: Optional[str] = Field(default=None, description=(
+        "Requested product category, when known. Use laptop for laptop computers, "
+        "a specific laptop subtype when requested, and Computer Accessories for "
+        "laptop bags, chargers or peripherals."))
     top_k: int = Field(default=5, ge=1, le=20)
     price_min: Optional[float] = Field(default=None, ge=0)
     price_max: Optional[float] = Field(default=None, ge=0)
@@ -126,7 +137,42 @@ class ProductSearchTool:
             logger.warning("Product lookup failed (%s)", type(error).__name__)
             return None
 
-    def search_products(self, query, top_k=5, price_min=None, price_max=None, city="INDORE"):
+    @staticmethod
+    def _laptop_categories(query, category=None):
+        """Use the same laptop family/subtypes as the website search."""
+        query = str(query or "")
+        requested = str(category or query)
+        if not re.search(r"(?<!\w)(?:laptops?|\u0932\u0948\u092a\u091f\u0949\u092a)(?!\w)", requested, re.I):
+            return []
+        from smart_search import deterministic
+        from search_taxonomy import CategoryCatalogue
+
+        path = os.getenv("SMART_SEARCH_TAXONOMY_PATH", str(
+            Path(__file__).resolve().parents[1] / "smart_search_taxonomy.json"))
+        taxonomy = _category_vocabulary(path)
+        # The singular subtype labels also apply to plural customer requests.
+        normalized = re.sub(r"\blaptops\b", "laptop", query, flags=re.I)
+        try:
+            intent, _, _ = deterministic(normalized, taxonomy)
+        except ValueError:
+            # A mixed-category request cannot be reduced to laptops alone.
+            return []
+        laptop_family = CategoryCatalogue(taxonomy).describe("Laptops")["matchedCategories"]
+        selected = CategoryCatalogue(taxonomy).describe(category)["matchedCategories"] if category else []
+        # Limit this guard to laptop requests; other product flows retain their
+        # existing intent handling. A specific subtype must stay specific.
+        if intent.categories and set(intent.categories).issubset(laptop_family):
+            if selected:
+                common = sorted(set(intent.categories) & set(selected))
+                if not common:
+                    raise ValueError("The query conflicts with the selected laptop subtype")
+                return common
+            return intent.categories
+        if category and not intent.categories:
+            return selected
+        return []
+
+    def search_products(self, query, top_k=5, price_min=None, price_max=None, city="INDORE", category=None):
         if not self.is_available:
             return []
         if not isinstance(top_k, int) or not 1 <= top_k <= 20:
@@ -140,6 +186,9 @@ class ProductSearchTool:
         try:
             filters = {"source": {"$eq": "sql_snapshot"},
                        "embedding_model": {"$eq": EMBEDDING_MODEL}}
+            categories = self._laptop_categories(query, category)
+            if categories:
+                filters["category"] = {"$in": categories}
             price_filter = {}
             if price_min is not None:
                 price_filter["$gte"] = float(price_min)
@@ -151,14 +200,25 @@ class ProductSearchTool:
             vector = self.model.encode(query, normalize_embeddings=True).tolist()
             # Fetch a wider candidate set before applying strict intent filters.
             # The final public result remains limited to the requested top_k.
+            laptop_budget = bool(categories and verify_live and price_filter)
             response = self.index.query(vector=vector, namespace=self.settings.namespace,
-                                        top_k=max(top_k, 20), include_metadata=True, filter=filters)
+                                        top_k=max(top_k, 60 if laptop_budget else 20),
+                                        include_metadata=True, filter=filters)
             results = []
             for match in response.matches:
                 record = self._record(match.id, match.metadata or {}, match.score)
-                if record:
+                if record and (not categories or record["category"] in categories):
                     results.append(record)
             results = self._apply_query_intent_filter(results, query)
+            if laptop_budget:
+                # Snapshot prices guide which candidates to verify first, but
+                # only current API prices decide whether a laptop fits the budget.
+                def budget_rank(record):
+                    price = record["price"]
+                    distance = max((price_min or 0) - price, 0,
+                                   price - price_max if price_max is not None else 0)
+                    return (distance > 0, distance)
+                results.sort(key=budget_rank)
             if verify_live:
                 return enrich(results, top_k=top_k, city=city,
                               price_min=price_min, price_max=price_max)
@@ -205,13 +265,15 @@ product_search_instance = ProductSearchTool()
 
 @tool("search_products", args_schema=ProductSearchInput, return_direct=False)
 def search_products(query: str, top_k: int = 5, price_min: Optional[float] = None,
-                    price_max: Optional[float] = None, city: str = "INDORE") -> str:
+                    price_max: Optional[float] = None, city: str = "INDORE",
+                    category: Optional[str] = None) -> str:
     """Search real indexed products by description and budget. Never returns demo products.
     If unavailable, explain the error; do not invent products, prices or links.
     With live verification enabled, respect price_verified/stock_verified and city.
     Otherwise prices and stock are from an imported snapshot, not guaranteed live inventory.
     """
-    results = product_search_instance.search_products(query, top_k, price_min, price_max, city=city)
+    results = product_search_instance.search_products(query, top_k, price_min, price_max,
+                                                      city=city, category=category)
     return product_search_instance.format_results(results, query, top_k, price_min, price_max)
 
 
