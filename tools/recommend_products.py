@@ -46,12 +46,15 @@ def recommend_products_tool(
     or in-stock alternatives; this verifies live city-specific stock.
     """
     query = category or "electronics appliances"
+    search_category = category
     if based_on_product_id is not None:
         base = product_search_instance.get_product_record(based_on_product_id)
         if not base:
             return {"error": product_search_instance.last_error or "Original indexed product not found."}
+        search_category = category or base.get("category")
         query = f"{category or base.get('category', '')} {base['product_name']}"
-    results = product_search_instance.search_products(query, top_k=20 if in_stock_only else 6, price_max=budget, city=city)
+    results = product_search_instance.search_products(query, top_k=20 if in_stock_only else 6,
+                                                      price_max=budget, city=city, category=search_category)
     if based_on_product_id is not None:
         filtered = [r for r in results if r["product_id"] != str(based_on_product_id)]
         results = LiveResults(filtered, results.verification, results.verification_error) if isinstance(results, LiveResults) else filtered
