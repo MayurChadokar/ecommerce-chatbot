@@ -20,7 +20,7 @@ _CATALOG: List[Dict[str, Any]] = [
         "product_name": "Redmi 14C 5G (4GB RAM, 64GB Storage) Stargaze Black",
         "brand": "Redmi",
         "category": "smartphone",
-``        "price": 9499,
+        "price": 9499,
         "image": f"{_IMG}/7045810IM.webp",
         "specs": {
             "Display": "6.88 inch HD+ 120Hz",
