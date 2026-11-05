@@ -4,7 +4,7 @@ SQLite persistence layer for Lotus Electronics chatbot.
 Replaces Redis for durable data since Redis is optional/often down here. Stores:
   - sessions   : one row per chat session (id, timestamps, message count)
   - chat_logs  : every user/assistant message (powers the admin transcript view)
-  - orders     : dummy orders (seeded + created via the chat "place order" flow)
+  - tickets and bulk enquiries raised through the chatbot
 
 Uses a fresh short-lived connection per call so it is safe under Flask's threaded
 dev server. All functions are defensive: a DB error is logged and swallowed so
@@ -55,18 +55,6 @@ def init_db() -> None:
                 CREATE TABLE IF NOT EXISTS chat_responses (
                     message_id INTEGER PRIMARY KEY,
                     response_json TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS orders (
-                    order_id          TEXT PRIMARY KEY,
-                    session_id        TEXT,
-                    product_id        TEXT,
-                    product_name      TEXT,
-                    amount            TEXT,
-                    status            TEXT,
-                    order_date        TEXT,
-                    expected_delivery TEXT,
-                    timeline_json     TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS tickets (
@@ -146,17 +134,75 @@ def get_sessions() -> List[Dict[str, Any]]:
 
 
 def get_chat_logs(session_id: str) -> List[Dict[str, Any]]:
+    """Return a transcript plus image URLs from each saved structured response.
+
+    Product cards are persisted in ``chat_responses.response_json``.  Exposing
+    their images here lets session viewers rebuild what the customer actually
+    saw instead of returning only the assistant's plain-text answer.
+    """
     try:
         with _connect() as conn:
             rows = conn.execute(
-                "SELECT id, role, message, created_at FROM chat_logs "
+                "SELECT l.id, l.role, l.message, l.created_at, r.response_json "
+                "FROM chat_logs l LEFT JOIN chat_responses r ON r.message_id = l.id "
                 "WHERE session_id = ? ORDER BY id ASC",
                 (session_id,),
             ).fetchall()
-            return [dict(r) for r in rows]
+            messages = []
+            for row in rows:
+                item = dict(row)
+                raw_response = item.pop("response_json", None)
+                item["result_images"] = _result_images(raw_response)
+                messages.append(item)
+            return messages
     except Exception as e:  # pragma: no cover - defensive
         print(f"❌ store.get_chat_logs failed: {type(e).__name__}: {e}")
         return []
+
+
+def _result_images(response_json: Optional[str]) -> List[Dict[str, str]]:
+    """Extract unique card images from a response already stored in SQLite."""
+    if not response_json:
+        return []
+    try:
+        response = json.loads(response_json)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(response, dict):
+        return []
+
+    candidates = []
+    for key in ("products", "recommendations"):
+        value = response.get(key)
+        if isinstance(value, list):
+            candidates.extend(item for item in value if isinstance(item, dict))
+    detail = response.get("product_details")
+    if isinstance(detail, dict) and detail:
+        candidates.append(detail)
+    comparison = response.get("comparison")
+    if isinstance(comparison, list):
+        candidates.extend(item for item in comparison if isinstance(item, dict))
+
+    images = []
+    seen = set()
+    for item in candidates:
+        base_name = str(item.get("product_name") or item.get("name") or "Product result")
+        image_fields = [(item.get("product_image") or item.get("image_url") or
+                         item.get("image") or item.get("first_image"), base_name)]
+        # Comparison cards carry two independent product images.
+        image_fields.extend([
+            (item.get("image_a"), str(item.get("name_a") or base_name)),
+            (item.get("image_b"), str(item.get("name_b") or base_name)),
+        ])
+        for image, name in image_fields:
+            if isinstance(image, list):
+                image = next((entry for entry in image if isinstance(entry, str) and entry.strip()), "")
+            if not isinstance(image, str) or not image.strip() or image.strip() in seen:
+                continue
+            image = image.strip()
+            seen.add(image)
+            images.append({"url": image, "name": name})
+    return images
 
 
 def get_stats() -> Dict[str, int]:
@@ -164,13 +210,12 @@ def get_stats() -> Dict[str, int]:
         with _connect() as conn:
             sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
             messages = conn.execute("SELECT COUNT(*) FROM chat_logs").fetchone()[0]
-            orders = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
             tickets = conn.execute("SELECT COUNT(*) FROM tickets").fetchone()[0]
             bulk = conn.execute("SELECT COUNT(*) FROM bulk_enquiries").fetchone()[0]
-            return {"sessions": sessions, "messages": messages, "orders": orders, "tickets": tickets, "bulk_enquiries": bulk}
+            return {"sessions": sessions, "messages": messages, "tickets": tickets, "bulk_enquiries": bulk}
     except Exception as e:  # pragma: no cover - defensive
         print(f"❌ store.get_stats failed: {type(e).__name__}: {e}")
-        return {"sessions": 0, "messages": 0, "orders": 0, "tickets": 0, "bulk_enquiries": 0}
+        return {"sessions": 0, "messages": 0, "tickets": 0, "bulk_enquiries": 0}
 
 
 def get_chat_context(session_id: str, limit: int = 40) -> List[Dict[str, Any]]:

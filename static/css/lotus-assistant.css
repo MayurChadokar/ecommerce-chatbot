@@ -83,14 +83,14 @@ body.assistant-page { display:block; animation:none; }
 .assistant-page .chat-toggle.active { display:none !important; }
 .assistant-page .chat-toggle .notification-badge { display:none !important; }
 /* Existing structured replies keep their markup and functionality. */
-.assistant-page .chat-messages :is(.card,.cmp-wrap,.order-wrap,.ticket-wrap) { border:1px solid #e1e7f0 !important; border-radius:12px !important; box-shadow:0 3px 12px #243b5308 !important; font-size:12px; overflow:hidden; }
+.assistant-page .chat-messages :is(.card,.cmp-wrap,.ticket-wrap) { border:1px solid #e1e7f0 !important; border-radius:12px !important; box-shadow:0 3px 12px #243b5308 !important; font-size:12px; overflow:hidden; }
 .assistant-page .product-card:hover,.assistant-page .store-card:hover,.assistant-page .product-card:hover .card { transform:none; }
 .assistant-page .product-card .product-image { background:#f5f6fb; }
 .assistant-page .product-card .card-title,.assistant-page .store-card .card-title { font-size:14px; line-height:1.5; }
 .assistant-page .chat-messages .text-primary { color:#007d87 !important; }
 .assistant-page .chat-messages .bg-primary { background:#007d87 !important; }
 .assistant-page .product-card .btn-outline-primary { background:#edf8fa; color:#007d87; border-color:#d9edf3; }
-.assistant-page .chat-messages .btn-primary,.assistant-page .cmp-head,.assistant-page .order-head { background:#007d87; border-color:#007d87; }
+.assistant-page .chat-messages .btn-primary,.assistant-page .cmp-head { background:#007d87; border-color:#007d87; }
 .assistant-page .product-detail-card .specifications,.assistant-page .product-detail-card .description,.assistant-page .ticket-issue { background:#f3f4fc; border-left-color:#8cc3cd; }
 .assistant-page .cmp-wrap { overflow-x:auto; }
 .assistant-page .cmp-table { min-width:310px; }

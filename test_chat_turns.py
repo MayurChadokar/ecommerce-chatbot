@@ -96,6 +96,39 @@ class TurnTests(TestCase):
         self.assertNotIn('released', json.dumps(response))
         self.responder.invoke.assert_not_called()
 
+    def test_empty_laptop_budget_search_explains_stock_and_keeps_the_budget(self):
+        search = Mock()
+        search.invoke.return_value = json.dumps({
+            'search_query':'laptop', 'products':[], 'price_filter':{'min':None,'max':45000},
+            'live_verification':{'enabled':True,'complete':True,'out_of_stock_count':9,
+                'nearest_above_budget':{'product_id':'37840','selling_price':58799}}})
+        self.scope['tools_by_name']['search_products'] = search
+        self.choose('search_products')
+        result = self.run_turn('office work, 45000')
+        response = json.loads(result['messages'][-1].content)
+        self.assertIn('in-stock', response['answer'])
+        self.assertIn('45,000', response['answer'])
+        self.assertIn('58,799', response['answer'])
+        self.assertIn('13,799', response['answer'])
+        self.assertIn('above your budget', response['answer'])
+        self.assertIn('another brand or a nearby store', response['end'])
+        self.assertIn('45,000', response['end'])
+        self.assertEqual(response['products'], [], 'An expensive alternative is not a budget match')
+        self.responder.invoke.assert_not_called()
+
+    def test_empty_budget_response_does_not_claim_verified_stock_on_partial_checks(self):
+        response = empty_product_search_response([{'tool':'search_products','result':json.dumps({
+            'search_query':'laptop','products':[], 'price_filter':{'max':45000},
+            'live_verification':{'enabled':True,'complete':False}})}])
+        self.assertNotIn('in-stock', response['answer'])
+        self.assertIn('45,000', response['answer'])
+
+    def test_changed_budget_is_used_instead_of_a_previous_budget(self):
+        response = empty_product_search_response([{'tool':'search_products','result':json.dumps({
+            'search_query':'laptop','products':[], 'price_filter':{'max':80000}})}])
+        self.assertIn('80,000', response['answer'])
+        self.assertNotIn('45,000', response['answer'])
+
     def test_empty_search_shortcut_preserves_errors_matches_and_other_tools(self):
         for payload in ({'products': [], 'error': 'Search unavailable'},
                         {'products': [], 'error_code': 'price_unverified'},

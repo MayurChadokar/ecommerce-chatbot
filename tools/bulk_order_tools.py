@@ -154,7 +154,7 @@ def create_bulk_order_enquiry(
     summary must have been displayed on a PREVIOUS turn. Only then accept explicit
     approval in a new customer message. All details must match the prepared draft.
     If the customer changes anything, prepare a fresh summary and wait again.
-    Never use place_order for this intent. Do not call for gift ideas alone,
+    Do not call for gift ideas alone,
     incomplete information, or before the customer confirms the summary.
     Returns a BULK reference after durable save, with quotation pending. It does
     not reserve stock, take payment, contact staff or promise discounts/delivery.
@@ -208,11 +208,11 @@ prepare_bulk_order_enquiry.handle_validation_error = _validation_question
 
 def normalize_bulk_response(response: dict, result: dict) -> dict:
     """Render only the authoritative result from this turn, never model-made IDs."""
+    response.pop("order", None)
     response["bulk_enquiry"] = {}
     response["bulk_draft"] = {}
     if result.get("enquiry_id"):
         response["bulk_enquiry"] = result
-        response["order"] = {}
         response["ticket"] = {}
         response["answer"] = (f"Your bulk quotation enquiry {result['enquiry_id']} has been saved. "
                               "Status: Quotation pending. Pricing, stock and delivery await confirmation. No purchase has been placed.")
@@ -222,17 +222,17 @@ def normalize_bulk_response(response: dict, result: dict) -> dict:
         lines.extend(f"{label}: {html.escape(str(result['details'].get(key) if result['details'].get(key) is not None else 'Not supplied / deferred'))}"
                      for key, label in FIELD_LABELS.items())
         lines.append("This is a quotation request; pricing, stock and delivery are not confirmed.")
-        response.update(answer="<br>".join(lines), bulk_draft=result, order={}, ticket={},
+        response.update(answer="<br>".join(lines), bulk_draft=result, ticket={},
                         end="Are these details correct, and may I submit this enquiry? Please confirm or tell me what to change.")
     elif result.get("error_code") == "bulk_arguments_invalid":
         # Never turn a malformed evidence map into a request to repeat quantity
         # or city. The response-only model sees the transcript and asks the next
         # real question; action success text is replaced deterministically.
         question = response.get("end")
-        response.update(answer="Your enquiry has not been submitted yet.", order={}, ticket={},
+        response.update(answer="Your enquiry has not been submitted yet.", ticket={},
                         end=question if isinstance(question, str) and question.strip() else
                         "Please confirm the remaining enquiry details so I can prepare your review summary.")
     elif result.get("error"):
-        response.update(answer=result["error"], order={}, ticket={},
+        response.update(answer=result["error"], ticket={},
                         end="")
     return response

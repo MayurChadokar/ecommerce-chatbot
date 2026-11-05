@@ -16,7 +16,7 @@
         <form class="login-card" method="POST" action="/admin/login">
             <div class="login-logo"><i class="fas fa-bolt"></i></div>
             <h1>Lotus Admin</h1>
-            <p class="login-sub">Sign in to view sessions, chats & orders</p>
+            <p class="login-sub">Sign in to view sessions, chats, tickets and enquiries</p>
             {% if error %}<div class="login-error"><i class="fas fa-circle-exclamation"></i> {{ error }}</div>{% endif %}
             <label>Password</label>
             <input type="password" name="password" placeholder="Enter admin password" autofocus required>
@@ -45,10 +45,6 @@
                 <div><div class="stat-value" id="statMessages">–</div><div class="stat-label">Messages</div></div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon orange"><i class="fas fa-box"></i></div>
-                <div><div class="stat-value" id="statOrders">–</div><div class="stat-label">Orders</div></div>
-            </div>
-            <div class="stat-card">
                 <div class="stat-icon red"><i class="fas fa-headset"></i></div>
                 <div><div class="stat-value" id="statTickets">–</div><div class="stat-label">Tickets</div></div>
             </div>
@@ -56,7 +52,6 @@
 
         <div class="tabs">
             <button class="tab active" data-tab="sessions"><i class="fas fa-comments"></i> Sessions &amp; Chats</button>
-            <button class="tab" data-tab="orders"><i class="fas fa-box"></i> Orders</button>
             <button class="tab" data-tab="tickets"><i class="fas fa-headset"></i> Tickets</button>
             <button class="tab" data-tab="bulk"><i class="fas fa-building"></i> Bulk enquiries</button>
         </div>
@@ -76,19 +71,6 @@
                 <div class="card-head"><i class="fas fa-comment-dots"></i> <span id="transcriptTitle">Transcript</span></div>
                 <div class="transcript" id="transcript">
                     <div class="muted center">Select a session to view its chat.</div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Orders view -->
-        <section id="tab-orders" style="display:none">
-            <div class="card">
-                <div class="card-head"><i class="fas fa-box-open"></i> Orders</div>
-                <div class="table-scroll">
-                    <table>
-                        <thead><tr><th>Order ID</th><th>Product</th><th>Amount</th><th>Status</th><th>Ordered</th><th>Expected</th></tr></thead>
-                        <tbody id="ordersBody"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
-                    </table>
                 </div>
             </div>
         </section>

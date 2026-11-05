@@ -11,7 +11,17 @@ from product_availability import availability_fields
 from product_index import product_url
 from product_pricing import price_number, pricing_fields
 
-_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="lotus-live")
+
+def worker_count():
+    """Bound live API concurrency while allowing one default search batch per wave."""
+    try:
+        value = int(os.getenv("LOTUS_LIVE_ENRICHMENT_WORKERS", "12"))
+        return value if 1 <= value <= 24 else 12
+    except ValueError:
+        return 12
+
+
+_pool = ThreadPoolExecutor(max_workers=worker_count(), thread_name_prefix="lotus-live")
 _slots = threading.BoundedSemaphore(24)
 PRICE_FIELDS = ("price", "product_mrp", "product_msrp", "selling_price", "mrp",
                 "store_offer_price", "eff_price", "discount_amount", "discount_percent")
@@ -207,7 +217,7 @@ def collect_live_products(messages):
     return products
 
 
-def normalize_live_response(response, products):
+def normalize_live_response(response, products, *, preserve_message=False):
     """Pin structured cards to backend facts before they are displayed or saved."""
     def normalize(card):
         if not isinstance(card, dict):
@@ -244,7 +254,12 @@ def normalize_live_response(response, products):
                 result["products"] = []
             result["products"].extend(missing)
         result["verification_notice"] = dict(VERIFICATION_NOTICE)
-        if not any(result.get(key) for key in ("stores", "policy_info", "comparison", "order", "ticket", "bulk_enquiry")):
+        if preserve_message:
+            notice = " Live price or stock is unconfirmed; shown catalogue prices are last-known."
+            if notice.strip() not in str(result.get("answer", "")):
+                result["answer"] = str(result.get("answer", "")).rstrip() + notice
+            result["end"] = "Use View product to verify current price and stock, or ask me to compare two options."
+        elif not any(result.get(key) for key in ("stores", "policy_info", "comparison", "order", "ticket", "bulk_enquiry")):
             result["answer"] = "Here are product options from our catalogue. Some live price or stock checks could not be completed; catalogue prices are last-known and availability is unconfirmed where indicated."
             result["end"] = "Use View product to verify the current price and stock before buying."
     return result

@@ -183,6 +183,22 @@ tbody tr.active { background: #e3edfd; }
 .bubble.user { background: var(--brand); color: #fff; margin-left: auto; border-bottom-right-radius: 4px; }
 .bubble.assistant { background: #f1f2f8; color: var(--text); border-bottom-left-radius: 4px; }
 .bubble .ts { display: block; font-size: 10px; opacity: .6; margin-top: 5px; }
+.session-result-images {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+.session-result-images a {
+    display: grid;
+    place-items: center;
+    min-height: 82px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: #fff;
+}
+.session-result-images img { width: 100%; height: 76px; object-fit: contain; }
 
 /* ---------------- Status badges ---------------- */
 .badge { padding: 4px 11px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; }

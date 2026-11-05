@@ -29,6 +29,9 @@ Optional `category` defaults to `all` (normal search). An exact catalogue label
 such as `Double Door Refrigerator` or a supported broad alias such as
 `Refrigerator`, `laptop`, `tv`, `ac`, `washing machine`, or `phone` constrains
 retrieval to that category/group. Brand matching runs within that scope.
+With `category: "all"`, a known catalogue brand such as `HP` or `Sony` searches
+all its product types without requiring a category. Brand-only queries, including
+an optional budget, resolve directly from catalogue labels without an AI call.
 Master parent labels such as `Computers`, `Television`, and `Home Appliances`
 include indexed descendants and products in the parent bucket itself. Query
 subtypes can narrow that scope. A functional washing-machine query excludes
@@ -95,8 +98,13 @@ specifications are matched literally, so coverage is conservative. This version
 does not promise every spelling variation or synonym will match.
 
 Pinecone returns a maximum ranked window of 200 candidates. Pages partition
-that window AFTER brand/category/specification filtering and BEFORE live budget
-filtering. A page can be short or empty when its candidates exceed the budget.
+matching products AFTER brand/category/specification and live price/stock filtering.
+Verification continues through the window until the requested page is filled or
+the window is exhausted. Sold-out or over-budget candidates on an earlier page
+do not hide later available matches. Numbered pages recheck the preceding matches
+using current data; `evaluatedCandidates` counts the full prefix checked.
+The counts in `verification` also cover that checked prefix, including candidates
+excluded by live stock or budget checks, rather than only the returned cards.
 Snapshot prices are used only to rank likely budget matches earlier; they never
 exclude candidates or become displayed prices.
 Use `pagination.nextPage` / `hasMoreCandidates`, not products.length, to continue.
@@ -117,19 +125,22 @@ price as zero or unknown stock as out of stock.
 
 Products that the live API confirms as out of stock are excluded from discovery
 results and alternatives. `verification.outOfStockCount` reports how many checked
-candidates were excluded. Pages can contain fewer results after these live checks;
-`pagination.nextPage` continues through the ranked candidate window. API failures
+candidates were excluded. Pages can contain fewer results when the ranked window
+is exhausted; `pagination.nextPage` continues through the remaining candidates. API failures
 still produce explicitly labelled catalogue fallbacks with unknown stock.
 
 ## AI and failures
 
-Every interpretable, uncached query goes to the existing Gemini client FIRST, including
+Queries containing only known catalogue brands and an optional budget resolve
+directly from catalogue labels. Missing category information cannot block these
+searches, and AI outages cannot prevent retrieval for a recognized brand.
+Other interpretable, uncached queries go to the existing Gemini client FIRST, including
 simple queries such as `mobile under 35000` and `voltas washing machine`.
 The complete original query (plus an optional selected category), real catalogue vocabulary, catalogue-derived category
 families and relevant indexed brand-category pairs go into a compact structured-output
 prompt. The full brand map stays in local grounding checks. Lexical parsing supplies
-constraint checks and a failure fallback; it does not bypass the LLM or override
-a validated semantic interpretation. Calls
+constraint checks and a failure fallback for these semantic queries; it does not
+override a validated semantic interpretation. Calls
 contain only a system prompt and the current query; there are no chat messages,
 tools, conversation history or actions. The AI returns source phrases and typed
 resolutions for every unresolved term. Valid category synonyms are consumed as
@@ -153,10 +164,11 @@ or modified known budgets. Brand typo corrections require a unique close match
 to the catalogue. Ambiguous or unsupported mappings fall back conservatively;
 this is not a guarantee that every arbitrary phrase will be understood.
 
-`data.interpretationSource` is `ai`, `ai_cache`, or `keyword`. There is no normal
-deterministic-only route. The existing `searchMode` contract is unchanged.
+`data.interpretationSource` is `catalogue` for recognized brand-only requests,
+or `ai`, `ai_cache`, or `keyword` for semantic requests and their fallbacks.
+The existing `searchMode` contract is unchanged.
 
-Brand selection comes from the LLM using actual indexed brand-category pairs,
+For semantic requests, brand selection comes from the LLM using actual indexed brand-category pairs,
 not a per-brand rewrite table. The generic validator allows a more specific
 compound label only when it preserves the complete requested name and is present
 in the relevant catalogue category. For example, the LLM can select Voltas Beko
@@ -324,6 +336,10 @@ The focused tests cover amount normalization, typo/brand/category constraints,
 budget boundaries, current-price filtering, invalid output, timeout/provider
 fallbacks, outage errors, request validation, SKU priority, pagination, no chat
 imports/history/tools and unchanged existing chatbot regression checks.
+Brand regressions iterate every label in the catalogue vocabulary, including
+brands whose records have no category. They also check that later in-stock or
+budget-matching products fill a page after earlier candidates are excluded, and
+that subsequent pages retain the remaining matches without duplicates.
 
 The 2026-10-05 master-category resolver passed 159 offline search/chat checks
 and 20 indexing checks. The search suite includes HTTP responses for all 176

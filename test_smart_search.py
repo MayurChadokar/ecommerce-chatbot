@@ -247,6 +247,19 @@ class SmartTests(unittest.TestCase):
         self.assertEqual(result["appliedFilters"]["brands"], [])
         self.assertEqual(len(result["products"]), 6)
 
+    def test_android_is_exact_catalogue_category_without_ai(self):
+        categories = ["Android Smartphone", "iPhone Mobile", "Feature Mobile Phone"]
+        self.search.taxonomy = {**TAXONOMY, "categories": categories}
+        phone = match(name="Samsung Android Smartphone A55")
+        phone.metadata["category"] = "Android Smartphone"
+        self.catalogue.index.query.return_value.matches = [phone]
+        result = self.search.search("android")
+        self.assertEqual([p["product_id"] for p in result["products"]], ["1"])
+        self.assertEqual(result["appliedFilters"]["categories"], ["Android Smartphone"])
+        self.assertEqual(result["appliedFilters"]["attributes"], [])
+        self.assertEqual(result["interpretationSource"], "catalogue")
+        self.assertFalse(result["clarificationRequired"])
+        self.ai.with_structured_output.assert_not_called()
     def test_even_simple_mobile_queries_go_through_llm(self):
         categories = ["Android Smartphone", "iPhone Mobile", "Feature Mobile Phone", "Mobile Accessories"]
         self.search.taxonomy = {**TAXONOMY, "categories": categories}
@@ -267,6 +280,70 @@ class SmartTests(unittest.TestCase):
                 self.assertNotIn("fallbackReason", result)
                 self.assertEqual(result["interpretationSource"], "ai")
         self.assertEqual(self.ai.with_structured_output.call_count, 6)
+
+    def test_conversational_mobile_queries_use_ai_without_literal_request_words(self):
+        categories = ["Android Smartphone", "iPhone Mobile", "Feature Mobile Phone"]
+        self.search.taxonomy = {**TAXONOMY, "categories": categories}
+        phone = match(name="Samsung Android Smartphone A15")
+        phone.metadata["category"] = "Android Smartphone"
+        self.catalogue.index.query.return_value.matches = [phone]
+        self.fetch.side_effect = lambda pid, city: detail(pid, city, 29999)
+        for query, word in [("mobile btao under 30000", "btao"),
+                            ("mobile batao under 30000", "batao"),
+                            ("मोबाइल बताओ 30000 के अंदर", "बताओ")]:
+            with self.subTest(query=query):
+                self.ai.with_structured_output.return_value.invoke.return_value = AIInterpretation(
+                    brands=[], categories=categories, price_min=None, price_max=30000.0,
+                    model="", attributes=[], preferences=[],
+                    resolutions=[{"source": word, "kind": "filler", "values": []}]).model_dump()
+                result = self.search.search(query)
+                self.assertEqual([p["product_id"] for p in result["products"]], ["1"])
+                self.assertEqual(result["interpretationSource"], "ai")
+                self.assertNotIn("fallbackReason", result)
+                self.assertEqual(result["appliedFilters"]["attributes"], [])
+                self.assertEqual(result["appliedFilters"]["price_max"], 30000)
+                messages = self.ai.with_structured_output.return_value.invoke.call_args.args[0]
+                self.assertEqual(messages[1].content, query)
+
+    def test_conversational_mobile_fallback_returns_only_phones_within_live_budget(self):
+        categories = ["Android Smartphone", "iPhone Mobile", "Feature Mobile Phone"]
+        self.search.taxonomy = {**TAXONOMY, "categories": categories}
+        phones = [match(pid, name="Samsung Android Smartphone A15") for pid in ("1", "2")]
+        for phone in phones:
+            phone.metadata["category"] = "Android Smartphone"
+        self.catalogue.index.query.return_value.matches = [*phones, match("3")]
+        self.fetch.side_effect = lambda pid, city: detail(pid, city, 29999 if str(pid) == "1" else 30001)
+        for reason in ("ai_provider_failure", "ai_timeout", "invalid_ai_output"):
+            for query in ("mobile btao under 30000", "mobile batao under 30000",
+                          "मोबाइल बताओ 30000 के अंदर"):
+                with self.subTest(reason=reason, query=query), patch(
+                        "smart_search.ai_interpret", return_value=(None, reason)):
+                    result = self.search.search(query)
+                    self.assertEqual([p["product_id"] for p in result["products"]], ["1"])
+                    self.assertEqual(result["fallbackReason"], reason)
+                    self.assertEqual(result["appliedFilters"]["attributes"], [])
+                    self.assertEqual(result["appliedFilters"]["price_max"], 30000)
+                    encoded_query = self.catalogue.model.encode.call_args.args[0]
+                    self.assertNotIn("btao", encoded_query)
+                    self.assertNotIn("batao", encoded_query)
+                    self.assertNotIn("बताओ", encoded_query)
+
+    def test_conversational_mobile_fallback_preserves_brand_colour_and_memory(self):
+        self.search.taxonomy = {**TAXONOMY, "categories": ["Android Smartphone"]}
+        phones = [match("1", name="Samsung red 8GB Android Smartphone"),
+                  match("2", name="Samsung blue 8GB Android Smartphone"),
+                  match("3", name="Samsung red 4GB Android Smartphone"),
+                  match("4", brand="LG", name="LG red 8GB Android Smartphone")]
+        for phone in phones:
+            phone.metadata["category"] = "Android Smartphone"
+        self.catalogue.index.query.return_value.matches = phones
+        self.fetch.side_effect = lambda pid, city: detail(pid, city, 29999)
+        with patch("smart_search.ai_interpret", return_value=(None, "ai_provider_failure")):
+            result = self.search.search("Samsung red mobile btao 8gb under 30000")
+        self.assertEqual([p["product_id"] for p in result["products"]], ["1"])
+        self.assertEqual(result["appliedFilters"]["brands"], ["Samsung"])
+        self.assertEqual(result["appliedFilters"]["attributes"], ["red", "8gb"])
+        self.assertEqual(result["appliedFilters"]["price_max"], 30000)
 
     def test_current_price_budget_not_snapshot_price(self):
         result = self.search.search("Samsung double door fridge under 40k")

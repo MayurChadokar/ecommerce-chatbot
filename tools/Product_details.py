@@ -1,5 +1,6 @@
 """Live product details with an explicitly unverified index fallback."""
 import os
+import threading
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -10,6 +11,18 @@ from langchain_core.tools import tool
 from product_availability import availability_fields
 from product_index import product_url
 from product_pricing import pricing_fields
+
+
+_http = threading.local()
+
+
+def _http_session():
+    """Reuse TLS connections on each long-lived live-verification worker."""
+    session = getattr(_http, "session", None)
+    if session is None:
+        session = requests.Session()
+        _http.session = session
+    return session
 
 
 class ProductDetailInput(BaseModel):
@@ -29,7 +42,7 @@ def fetch_live_details(product_id: int, city: str = "INDORE") -> Dict[str, Any]:
     if not token:
         return unavailable
     try:
-        response = requests.post(
+        response = _http_session().post(
             "https://portal.lotuselectronics.com/web-api/home/product_detail",
             headers={"auth-key": "Web2@!9", "auth-token": token, "end-client": "Lotus-Web"},
             data={"product_id": str(product_id), "city": city},

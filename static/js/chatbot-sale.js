@@ -602,36 +602,6 @@ class ChatBot {
         this.scrollToBottom();
     }
 
-    addOrderCard(order) {
-        const cardDiv = document.createElement('div');
-        cardDiv.className = 'order-card fade-in';
-
-        const timeline = Array.isArray(order.timeline) ? order.timeline : [];
-        const stepsHtml = timeline.map(t => `
-            <div class="order-step ${t.state}">
-                <div class="order-dot"><i class="fas fa-${t.state === 'done' ? 'check' : (t.state === 'current' ? 'location-dot' : 'circle')}"></i></div>
-                <div class="order-step-label">${t.stage}${t.date ? `<span>${t.date}</span>` : ''}</div>
-            </div>`).join('');
-
-        cardDiv.innerHTML = `
-            <div class="order-wrap">
-                <div class="order-head">
-                    <span><i class="fas fa-box"></i> Order ${order.order_id}</span>
-                    <span class="order-status">${order.status || ''}</span>
-                </div>
-                <div class="order-product">${order.product_name || ''}</div>
-                <div class="order-meta">
-                    ${order.amount ? `<span><i class="fas fa-tag"></i> ${order.amount}</span>` : ''}
-                    ${order.order_date ? `<span><i class="fas fa-calendar"></i> ${order.order_date}</span>` : ''}
-                    ${order.expected_delivery ? `<span><i class="fas fa-truck"></i> Est. ${order.expected_delivery}</span>` : ''}
-                </div>
-                <div class="order-timeline">${stepsHtml}</div>
-            </div>`;
-
-        this.chatMessages.appendChild(cardDiv);
-        this.scrollToBottom();
-    }
-
     addBulkEnquiryCard(enquiry) {
         const card = document.createElement('article');
         card.className = 'bulk-enquiry-card fade-in';
@@ -751,7 +721,6 @@ class ChatBot {
         const policyInfo = responseData.policy_info;
         const comparison = responseData.comparison;
         const recommendations = responseData.recommendations;
-        const order = responseData.order;
         const ticket = responseData.ticket;
         const bulkEnquiry = responseData.bulk_enquiry;
         const end = responseData.end;
@@ -822,9 +791,6 @@ class ChatBot {
         if (recommendations && Array.isArray(recommendations) && recommendations.length > 0) {
             this.addRecommendationHeader();
             recommendations.forEach(product => this.addProductCard(product));
-        }
-        if (order && typeof order === 'object' && order.order_id) {
-            this.addOrderCard(order);
         }
         if (ticket && typeof ticket === 'object' && ticket.ticket_id) {
             this.addTicketCard(ticket);
@@ -1063,7 +1029,6 @@ class ChatBot {
             kitchenappliance: "I'm looking for kitchen appliances. What options are available?",
             ac: "I need an air conditioner. Can you show me your AC collection?",
             recommend: "Can you recommend a good smartphone under 20000?",
-            trackorder: "I'd like to track my order LOTUS1001.",
             raiseticket: "I have an issue and would like to raise a support ticket.",
             storelocator: "I want to find a Lotus Electronics store near me. Can you help?"
         };

@@ -149,6 +149,43 @@ class LiveTests(unittest.TestCase):
         self.assertTrue(results[0]["catalogue_fallback"])
         self.assertEqual(fetch.call_count, 10)
 
+    def test_later_affordable_in_stock_candidate_is_not_hidden_by_first_ten(self):
+        records = [self.search._record(str(pid), metadata(str(pid))) for pid in range(1, 13)]
+        fetch = Mock(side_effect=lambda pid, city: live(pid=pid, price=43999 if pid == 11 else 58799,
+                                                      stock="No" if pid < 10 else "Yes", city=city))
+        result = enrich(records, top_k=5, city="INDORE", price_max=45000, fetch=fetch)
+        self.assertEqual([r["product_id"] for r in result], ["11"])
+        self.assertEqual(fetch.call_count, 12)
+        self.assertEqual(result.verification["candidate_count"], 12)
+        self.assertTrue(result.verification["complete"])
+        self.assertTrue(result[0]["price_verified"])
+        self.assertEqual(result[0]["selling_price"], 43999)
+
+    def test_budget_failure_retains_verified_nearest_option_without_exceeding_budget(self):
+        records = [self.search._record(str(pid), metadata(str(pid))) for pid in range(1, 4)]
+        fetch = Mock(side_effect=lambda pid, city: live(pid=pid, price={1:44999, 2:58799, 3:60000}[pid],
+                                                      stock="No" if pid == 1 else "Yes", city=city))
+        result = enrich(records, top_k=5, city="INDORE", price_max=45000, fetch=fetch)
+        self.assertEqual(result, [])
+        self.assertEqual(result.verification["nearest_above_budget"]["selling_price"], 58799)
+        self.assertEqual(result.verification["nearest_above_budget"]["product_id"], "2")
+
+    def test_unverified_stock_or_price_cannot_be_an_above_budget_suggestion(self):
+        record = self.search._record("1", metadata())
+        for detail in (live(price=58799, stock="Unknown"), {"error":"unavailable"}):
+            with self.subTest(detail=detail):
+                result = enrich([record], top_k=5, city="INDORE", price_max=35000,
+                                fetch=Mock(return_value=detail))
+                self.assertNotIn("nearest_above_budget", result.verification)
+
+    def test_additional_batch_remains_bounded_at_twenty(self):
+        records = [self.search._record(str(pid), metadata(str(pid))) for pid in range(1, 31)]
+        fetch = Mock(side_effect=lambda pid, city: live(pid=pid, price=58799, city=city))
+        result = enrich(records, top_k=5, city="INDORE", price_max=45000, fetch=fetch)
+        self.assertEqual(result, [])
+        self.assertEqual(fetch.call_count, 20)
+        self.assertEqual(result.verification["candidate_count"], 20)
+
     def test_identity_and_location_mismatch_fail_closed(self):
         for detail in (live(pid=2), live(product_sku="OTHER"), live(city="BHOPAL"),
                        live(source="sql_snapshot"), []):
@@ -295,6 +332,17 @@ class CardTests(unittest.TestCase):
         self.assertNotIn("TUF", result["answer"])
         self.assertIn("last-known", result["answer"])
 
+    def test_fast_path_preserves_range_message_with_fallback_cards(self):
+        fact = {"product_id": "1", "product_name": "Indexed phone",
+                "catalogue_price": 47990, "catalogue_fallback": True,
+                "price_verified": False, "stock_verified": False}
+        result = normalize_live_response(
+            {"answer": "Options around Rs 50,000 (Rs 45,000-Rs 55,000).",
+             "products": [], "recommendations": [fact]},
+            {"1": fact}, preserve_message=True)
+        self.assertIn("45,000", result["answer"])
+        self.assertIn("last-known", result["answer"])
+        self.assertEqual(result["recommendations"], [fact])
     def test_verified_result_cannot_invent_a_failure_popup(self):
         result = normalize_live_response({"answer": "Verified", "products": [live()], "verification_notice": {"title": "fake"}}, {"1": live()})
         self.assertEqual(result["answer"], "Verified")

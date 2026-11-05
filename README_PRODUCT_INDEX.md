@@ -239,3 +239,17 @@ Offline regression checks (no provider calls; the suite uses temporary databases
 ```powershell
 .\.venv\Scripts\python.exe -m unittest test_live_enrichment test_chat_turns test_product_index test_product_pricing test_product_availability test_bulk_orders -q
 ```
+
+"Ask about this" sends the selected card's `product_id` and `stock_city` (default
+`INDORE`) to `/chat` as `product_id` and `city`. The backend directly resolves that
+ID through the live detail tool and persists its complete result, without model
+rendering or Redis context. MRP, selling price, city-specific stock, specifications
+and the canonical product link therefore survive into `product_details`. A failed
+live lookup shows only explicitly unverified catalogue facts when available;
+it never invents details or treats an API failure as out of stock. The detail card
+shows five key specifications with the remaining specifications in a disclosure.
+
+Deploy `app.py`, `chat.py`, `static/js/chatbot-sale.js` and `templates/chat.html`
+together and restart the application. The template's script version refreshes
+cached UI code. Run `.\.venv\Scripts\python.exe -m unittest test_ask_about -q` and
+`node test_ask_about_ui.cjs` for the selection contract and rendering checks.

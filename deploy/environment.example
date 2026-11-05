@@ -5,6 +5,10 @@ FLASK_SECRET=replace-with-a-random-secret
 ADMIN_PASSWORD=replace-with-a-strong-admin-password
 FLASK_DEBUG=false
 
+# Allow any frontend origin/port to call /smart/search and /api/search/smart.
+# Optional: replace * with exact origins separated by commas, or empty to disable.
+SMART_SEARCH_CORS_ORIGINS=*
+
 ENABLE_VECTOR_SEARCH=true
 PINECONE_API_KEY=replace-with-your-fresh-pinecone-key
 PINECONE_INDEX_NAME=lotus-products-minilm
@@ -18,7 +22,10 @@ TOKENIZERS_PARALLELISM=false
 # A valid Lotus token is needed for current price/stock and order checks.
 LOTUS_AUTH_TOKEN=replace-with-your-valid-lotus-token
 LOTUS_LIVE_ENRICHMENT=true
-LOTUS_LIVE_ENRICHMENT_TIMEOUT=6
+LOTUS_LIVE_ENRICHMENT_TIMEOUT=2
 
 # The legacy policy-vector integration needs a separate index and dependencies.
 ENABLE_POLICY_VECTOR_SEARCH=false
+
+# Redis is optional and disabled by default.
+ENABLE_REDIS=false

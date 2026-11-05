@@ -92,6 +92,8 @@ ALIASES = {"voltus": "voltas", "refregistor": "refrigerator",
            "रेफ्रिजरेटर": "refrigerator", "सैमसंग": "samsung",
            "वोल्टास": "voltas", "टीवी": "tv", "लैपटॉप": "laptop"}
 STOP = set("a an the me mujhe chahiye chaiye dikhao dikha show find search for with ka ki ke mein me hai please pls product products buy want i wala wali wale and aur rs inr rupees rupaye best good achha achi अच्छा अच्छी रुपये रुपए तक अंदर में का की के मुझे चाहिए दिखाओ".split())
+# Request verbs must not become literal product filters during AI fallback.
+STOP |= {"batao", "btao", "बताओ"}
 PREFERENCES = {"gaming", "office", "study", "student", "travel"}
 AMOUNT = r"(?:\d[\d,]*(?:\.\d+)?)\s*(?:lakh|lac|hazar|hazaar|thousand|हजार|हज़ार|लाख|k)?"
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="smart-interpret")
@@ -132,6 +134,7 @@ def category_aliases(categories, taxonomy=None):
         "phone": [c for c in categories if c in {"Android Smartphone", "iPhone Mobile", "Feature Mobile Phone"}],
         "smartphone": [c for c in categories if c in {"Android Smartphone", "iPhone Mobile"}],
         "iphone": [c for c in categories if c == "iPhone Mobile"],
+        "android": [c for c in categories if c == "Android Smartphone"],
     }
     # Storefront vocabulary says "Android Smartphone"; customers often say
     # "mobile". Consume it as a category, not an extra literal specification.
@@ -723,6 +726,11 @@ class SmartSearch:
         # Catalogue brand identity is already exact. A brand-only request must
         # not depend on a provider deciding which product category it belongs to.
         if base.brands and not (base.categories or base.attributes or base.preferences):
+            return base, normalized, corrections, None, "catalogue"
+        # Android is an exact storefront product type, not an ambiguous phone family.
+        # Resolve it locally so iPhone and feature-phone categories cannot leak in.
+        if (base.categories == ["Android Smartphone"] and not base.brands
+                and not base.attributes and not base.preferences):
             return base, normalized, corrections, None, "catalogue"
         key = (self.catalogue.settings.namespace, taxonomy["version"], normalize(query), brand_match)
         with self._cache_lock:

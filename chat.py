@@ -164,7 +164,8 @@ def initialize_redis():
         return None
 
 # Try to initialize Redis, but don't exit if it fails
-redis_memory = initialize_redis()
+redis_memory = (initialize_redis() if os.getenv("ENABLE_REDIS", "false").lower() == "true"
+                else None)
 if not redis_memory:
     print("⚠️  Running without Redis memory - conversations won't be persistent")
     # Create a fallback memory class that doesn't use Redis
@@ -212,18 +213,17 @@ from tools.get_nearby_store import get_near_store
 from tools.Product_details import get_filtered_product_details_tool
 # Import the terms & conditions search tool
 from tools.search_terms_conditions import search_terms_conditions
-# Compare, recommend and order tools (backed by the local catalog + SQLite store)
+# Compare, recommend and support tools
 from tools.compare_products import compare_products_tool
 from tools.recommend_products import recommend_products_tool
 from tools.browse_catalog import browse_catalog_tool
-from tools.order_tools import place_order_tool, track_order_tool, set_current_session
-from tools.ticket_tools import raise_ticket_tool
+from tools.ticket_tools import raise_ticket_tool, normalize_ticket_response
+from tools.session_context import set_current_session
 from tools.bulk_order_tools import create_bulk_order_enquiry, prepare_bulk_order_enquiry, normalize_bulk_response
 
-# SQLite persistence for chat logs, sessions and orders
+# SQLite persistence for chat logs, tickets and bulk enquiries
 import store
 store.init_db()
-store.seed_orders()
 
 # from langchain_tavily import TavilySearch
 
@@ -237,8 +237,6 @@ tools = [
     compare_products_tool,
     recommend_products_tool,
     browse_catalog_tool,
-    place_order_tool,
-    track_order_tool,
     raise_ticket_tool,
     create_bulk_order_enquiry,
     prepare_bulk_order_enquiry,
@@ -267,7 +265,6 @@ You MUST respond with EXACTLY this JSON structure - NO nested JSON strings, NO e
   "policy_info": {policy object if search_terms_conditions was used},
   "comparison": [comparison object if compare_products was used],
   "recommendations": [array of product objects if recommend_products was used],
-  "order": {order object if place_order or track_order was used},
   "ticket": {ticket object if raise_ticket was used},
   "bulk_enquiry": {saved enquiry object if create_bulk_order_enquiry succeeded},
   "end": "follow-up question to continue conversation"
@@ -300,20 +297,11 @@ TOOL USAGE RULES:
    ("recommend", "suggest", "what else", "alternatives", "something similar",
    "best phone under 20000"). Pass a category and/or budget, or based_on_product_id.
    Put the returned list in the "recommendations" field.
-7. Use place_order ONLY for an INDIVIDUAL personal purchase, never for bulk,
-   employee gifting, corporate or institutional procurement. For those requests
-   use the BULK ENQUIRY FLOW below even when the customer says "place order".
-   For an individual purchase of a specific product ("order this",
-   "buy", "place an order", "I want to purchase"). Extract the product_id. Put the
-   returned order object in the "order" field ONLY if it has an order_id and no error.
-   On an error, leave order empty and explain the actual error_code. Never translate
-   availability_unverified or a failed product lookup into "out of stock".
-   Pass the user's city when known. The current order tool creates local demo orders:
-   if is_demo is true, explicitly call it a demo order, never a real retailer purchase.
-8. Use track_order when the user wants the STATUS of an order ("track my order",
-   "where is my order", "order status") and gives an order id like LOTUS1001. Put
-   the returned order object in the "order" field.
-9. Use browse_catalog to browse indexed products by category and budget.
+7. Ordering and order tracking are not available in this chatbot. If a customer
+   asks to buy, place or track an individual order, explain that the chatbot cannot
+   do that and direct them to the product link or Lotus customer support. Never
+   invent an order id or order status.
+8. Use browse_catalog to browse indexed products by category and budget.
    Search, recommendations and browsing use the same Pinecone product index.
    Once the customer supplies a budget/use case (e.g. "office work, 45000" after
    asking for a laptop), search the previous category with that exact budget and
@@ -343,7 +331,11 @@ TOOL USAGE RULES:
     d) Once you have all three, call raise_ticket(name, phone, issue). Put the
        returned ticket object in the "ticket" field and confirm the ticket id warmly.
     Only call raise_ticket when you actually have name, phone AND issue.
-11. DON'T use tools when discussing general product info that doesn't need specific details
+11. Any claim about whether Lotus carries, stocks or has a product MUST come from a
+    product search in the current turn. Never answer inventory availability from
+    model memory. When an exact subtype has no matches, clearly label any related
+    products as alternatives and do not imply that they satisfy the requested subtype.
+12. DON'T use tools when discussing general product info that doesn't need specific details
 
 BULK ENQUIRY FLOW - applies when the CURRENT request is to arrange a bulk purchase:
 - A pending enquiry is not a lock on the conversation. Answer the CURRENT request
@@ -386,11 +378,11 @@ BULK ENQUIRY FLOW - applies when the CURRENT request is to arrange a bulk purcha
   confirmed=true and confirmation_message copied from the CURRENT user message.
   Never call it before prepare_bulk_order_enquiry. Any change needs a fresh prepared
   summary and new approval. Use exactly the prepared details. Put its exact
-  successful object in bulk_enquiry; leave order and ticket empty. Confirm the BULK
+  successful object in bulk_enquiry; leave ticket empty. Confirm the BULK
   enquiry reference and quotation-pending status, not "order successfully placed".
 - No successful tool result means no confirmation. On validation/save failure ask
-  for the missing detail or explain failure; NEVER fall back to place_order or
-  raise_ticket. Never invent dispatch/delivery dates, bulk discounts or reservations.
+  for the missing detail or explain failure; NEVER fall back to raise_ticket.
+  Never invent dispatch/delivery dates, bulk discounts or reservations.
 - The enquiry is saved for admin review. There is no automatic team notification,
   callback SLA or checkout integration: do not claim that staff were contacted.
   Do not promise a call, a reply soon, or that the team will get back to the customer.
@@ -476,7 +468,7 @@ When user asks "compare the last two phones" (extract both product_ids, e.g. 394
   "stores": [],
   "policy_info": {},
   "comparison": [{"name": "Redmi 14C 5G", "vs_name": "Redmi A5 4G", "differences": ["Network: Redmi has 5G vs Redmi 4G", "Storage: 64GB vs 128GB"], "spec_table": [{"feature": "Price", "a": "₹9,499", "b": "₹7,499"}], "verdict": "..."}],
-  "end": "Would you like to order one of these?"
+  "end": "Would you like to view details for either product?"
 }
 
 When user asks "recommend me a smartphone under 20000":
@@ -484,23 +476,7 @@ When user asks "recommend me a smartphone under 20000":
   "answer": "Based on your budget, here are some smartphones I'd recommend.",
   "products": [],
   "recommendations": [{"product_id": "38210", "product_name": "OnePlus Nord CE4 Lite 5G", "product_mrp": "₹19,999", "product_image": "...", "product_url": "...", "features": ["8GB RAM", "5500 mAh"]}],
-  "end": "Would you like to compare any of these or place an order?"
-}
-
-When user asks "place an order for product 39422":
-{
-  "answer": "Great choice! I've placed your order for the Redmi 14C 5G. You can track it anytime using the order id below.",
-  "products": [],
-  "order": {"order_id": "LOTUS54321", "product_name": "Redmi 14C 5G", "status": "Processing", "order_date": "16 Jul 2026", "expected_delivery": "20 Jul 2026", "timeline": [{"stage": "Order Placed", "state": "done"}, {"stage": "Processing", "state": "current"}]},
-  "end": "Is there anything else you'd like to add to your order?"
-}
-
-When user asks "track my order LOTUS1001":
-{
-  "answer": "Here's the latest status of your order.",
-  "products": [],
-  "order": {"order_id": "LOTUS1001", "product_name": "Samsung Galaxy A26 5G", "status": "Delivered", "order_date": "07 Jul 2026", "expected_delivery": "11 Jul 2026", "timeline": [...]},
-  "end": "Can I help you with anything else?"
+  "end": "Would you like to compare any of these or open a product page?"
 }
 
 When a user reports an issue (e.g. "my TV screen is flickering"), FIRST help, THEN offer a ticket:
@@ -530,9 +506,6 @@ CONVERSATION INTELLIGENCE:
   Call recommend_products(in_stock_only=True) with the previous category, budget,
   city and rejected product as based_on_product_id when known. Do not repeat the
   rejected item's stock message or ask again whether they want recommendations.
-- For individual purchases only, "okay/yes/haan" after offering to order ONE specific product means call place_order
-  for that product. If several products were offered without a single selection,
-  ask which one. Resolve context from the immediately preceding exchange.
 - Only claim "in stock"/"out of stock" from stock_verified=true live tool results
   for the customer's city. Snapshot listings, lookup errors and unknown values do
   not establish current stock. Never say "order right away" from search results.
@@ -862,7 +835,7 @@ def _run_agent(message: str, session_id: str = "default_session", *, actions=Non
         # Use session_id as user_id for Redis memory
         user_id = session_id
 
-        # Make the session available to order tools and log the user's message
+        # Share request-local context with persistence-backed tools, then log.
         set_current_session(session_id)
         try:
             current_message_id = store.log_message(session_id, "user", message)
@@ -941,6 +914,13 @@ def _run_agent(message: str, session_id: str = "default_session", *, actions=Non
                     # Remember the most recent tool output for fallback recovery
                     if msg_type == "tool" and getattr(last_message, "content", None):
                         last_tool_result = last_message.content
+                        if actions is not None and getattr(last_message, "name", "") == "raise_ticket":
+                            try:
+                                ticket_result = json.loads(last_message.content) if isinstance(last_message.content, str) else last_message.content
+                            except (TypeError, ValueError):
+                                ticket_result = {}
+                            if isinstance(ticket_result, dict) and ticket_result.get("ticket_id") and not ticket_result.get("error"):
+                                actions["ticket"] = ticket_result
                     if hasattr(last_message, 'content') and msg_type is not None:
                         # Accept AI responses as final (tools feed data to LLM)
                         if msg_type == 'ai' and last_message.content:
@@ -1111,7 +1091,6 @@ def _run_agent(message: str, session_id: str = "default_session", *, actions=Non
                 "policy_info": {},
                 "comparison": [],
                 "recommendations": [],
-                "order": {},
                 "end": "Is there anything else I can help you with?"
             }
             recovered = False
@@ -1125,10 +1104,6 @@ def _run_agent(message: str, session_id: str = "default_session", *, actions=Non
                 if tool_data.get("spec_table"):
                     recovery["comparison"] = [tool_data]
                     recovery["answer"] = "Here's a side-by-side comparison of the two products."
-                    recovered = True
-                elif tool_data.get("order_id"):
-                    recovery["order"] = tool_data
-                    recovery["answer"] = "Here are your order details."
                     recovered = True
             elif isinstance(tool_data, list) and tool_data:
                 recovery["products"] = tool_data
@@ -1174,7 +1149,35 @@ def chat_with_agent(message: str, session_id: str = "default_session", *,
     """
     actions = {}
     if product_id is None:
-        response = _run_agent(message, session_id, actions=actions)
+        # Explicit recommendation ranges can skip two model round-trips.
+        from chat_fast_path import fast_budget_recommendation, fast_portable_ac_alternatives
+        try:
+            rows = store.get_chat_context(session_id)
+            previous_user_messages = [row["message"] for row in rows
+                                      if row.get("role") == "user" and row.get("message")]
+            fast_response = fast_portable_ac_alternatives(message, city=city)
+            if fast_response is None:
+                fast_response = fast_budget_recommendation(
+                    message, previous_user_messages=previous_user_messages, city=city)
+        except Exception as fast_error:
+            print(f"Budget recommendation fast path failed: {type(fast_error).__name__}")
+            fast_response = None
+        if fast_response is not None:
+            try:
+                store.log_message(session_id, "user", message)
+                from langchain_core.messages import HumanMessage
+                redis_memory.add_message_to_user(session_id, HumanMessage(content=message))
+            except Exception as log_err:
+                print(f"Failed to log fast recommendation request: {log_err}")
+            actions["preserve_product_message"] = True
+            actions["live_products"] = {
+                str(card["product_id"]): card
+                for card in fast_response.get("recommendations", [])
+                if isinstance(card, dict) and card.get("product_id")
+            }
+            response = json.dumps(fast_response, ensure_ascii=False)
+        else:
+            response = _run_agent(message, session_id, actions=actions)
     else:
         # Ask-about is a fixed detail action. Preserve all API fields without
         # relying on model tool selection, model rendering, or Redis history.
@@ -1197,6 +1200,7 @@ def chat_with_agent(message: str, session_id: str = "default_session", *,
                 from live_product_enrichment import merge_live, live_card_fields
                 detail = merge_live(detail, None, city)
                 detail.update(live_card_fields(detail))
+            actions["preserve_product_message"] = True
             actions["live_products"] = {str(product_id): detail}
         response = json.dumps({
             "answer": ("Here are the details for your selected product." if valid_detail else
@@ -1210,7 +1214,11 @@ def chat_with_agent(message: str, session_id: str = "default_session", *,
         if isinstance(parsed_response, dict):
             from live_product_enrichment import enabled as live_enabled, normalize_live_response
             if live_enabled() or product_id is not None:
-                parsed_response = normalize_live_response(parsed_response, actions.get("live_products", {}))
+                parsed_response = normalize_live_response(
+                    parsed_response, actions.get("live_products", {}),
+                    preserve_message=actions.get("preserve_product_message", False))
+            parsed_response = normalize_ticket_response(
+                parsed_response, actions.get("ticket", {}), message)
             response = json.dumps(normalize_bulk_response(
                 parsed_response, actions.get("bulk_enquiry", {})), ensure_ascii=False)
     except (ValueError, TypeError):

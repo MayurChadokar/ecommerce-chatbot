@@ -799,7 +799,7 @@
 }
 
 /* ============================================================= */
-/* Comparison, recommendation & order cards + UI polish          */
+/* Comparison and recommendation cards + UI polish              */
 /* ============================================================= */
 
 /* --- Product comparison --- */
@@ -878,106 +878,6 @@
     flex: 1;
     height: 1px;
     background: linear-gradient(90deg, var(--primary-color), transparent);
-}
-
-/* --- Order tracking card --- */
-.order-card { margin: 10px 0; }
-.order-wrap {
-    background: #fff;
-    border: 1px solid var(--border-color);
-    border-radius: 14px;
-    padding: 14px 16px;
-    box-shadow: var(--shadow);
-}
-.order-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-weight: 700;
-    font-size: 0.9rem;
-    color: var(--text-dark);
-}
-.order-status {
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-    color: #fff;
-    font-size: 0.72rem;
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 20px;
-}
-.order-product {
-    font-size: 0.85rem;
-    color: var(--text-dark);
-    margin: 8px 0 6px;
-    font-weight: 500;
-}
-.order-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    font-size: 0.76rem;
-    color: var(--text-light);
-    margin-bottom: 14px;
-}
-.order-meta span { display: inline-flex; align-items: center; gap: 5px; }
-
-/* Timeline */
-.order-timeline {
-    display: flex;
-    justify-content: space-between;
-    position: relative;
-}
-.order-timeline::before {
-    content: "";
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    right: 12px;
-    height: 2px;
-    background: var(--border-color);
-    z-index: 0;
-}
-.order-step {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    flex: 1;
-    text-align: center;
-}
-.order-dot {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: #e9ecef;
-    color: #adb5bd;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.6rem;
-    border: 2px solid #fff;
-}
-.order-step.done .order-dot { background: #28a745; color: #fff; }
-.order-step.current .order-dot {
-    background: var(--primary-color);
-    color: #fff;
-    box-shadow: 0 0 0 4px rgba(66, 133, 244, 0.2);
-}
-.order-step-label {
-    font-size: 0.64rem;
-    color: var(--text-light);
-    margin-top: 6px;
-    line-height: 1.2;
-}
-.order-step.current .order-step-label,
-.order-step.done .order-step-label { color: var(--text-dark); font-weight: 600; }
-.order-step-label span {
-    display: block;
-    font-size: 0.58rem;
-    color: var(--text-light);
-    font-weight: 400;
-    margin-top: 2px;
 }
 
 /* ============================================================= */
@@ -1287,8 +1187,8 @@ body {
 .chat-messages::-webkit-scrollbar-thumb:hover { background: rgba(66, 133, 244, 0.6); background-clip: padding-box; }
 .chat-messages::-webkit-scrollbar-track { background: transparent; }
 
-/* --- Comparison / order card shadow harmonization --- */
-.cmp-wrap, .order-wrap {
+/* --- Comparison card shadow harmonization --- */
+.cmp-wrap {
     box-shadow: 0 6px 20px rgba(20, 40, 60, 0.08);
     border-color: rgba(20, 40, 60, 0.06);
 }

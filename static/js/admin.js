@@ -30,13 +30,21 @@
         return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
     }
 
+    function resultImages(message) {
+        if (!Array.isArray(message.result_images) || !message.result_images.length) return "";
+        return `<div class="session-result-images">${message.result_images.map(image => `
+            <a href="${esc(image.url)}" target="_blank" rel="noopener noreferrer" title="${esc(image.name)}">
+                <img src="${esc(image.url)}" alt="${esc(image.name)}" loading="lazy"
+                     onerror="this.closest('a').remove()">
+            </a>`).join("")}</div>`;
+    }
+
     async function loadStats() {
         try {
             const s = await getJSON("/admin/api/stats");
             if (!s) return;
             $("statSessions").textContent = s.sessions;
             $("statMessages").textContent = s.messages;
-            $("statOrders").textContent = s.orders;
             if ($("statTickets")) $("statTickets").textContent = s.tickets != null ? s.tickets : 0;
         } catch (e) { console.error(e); }
     }
@@ -80,6 +88,7 @@
             box.innerHTML = data.messages.map(m => `
                 <div class="bubble ${m.role === "user" ? "user" : "assistant"}">
                     ${esc(m.message)}
+                    ${resultImages(m)}
                     <span class="ts">${fmtTime(m.created_at)}</span>
                 </div>`).join("");
         } catch (e) {
@@ -87,29 +96,8 @@
         }
     }
 
-    async function loadOrders() {
-        try {
-            const orders = await getJSON("/admin/api/orders");
-            if (!orders) return;
-            const body = $("ordersBody");
-            if (!orders.length) {
-                body.innerHTML = '<tr><td colspan="6" class="muted center">No orders yet.</td></tr>';
-                return;
-            }
-            body.innerHTML = orders.map(o => `
-                <tr>
-                    <td class="order-id">${esc(o.order_id)}</td>
-                    <td>${esc(o.product_name)}</td>
-                    <td>${esc(o.amount)}</td>
-                    <td><span class="badge ${badgeClass(o.status)}">${esc(o.status)}</span></td>
-                    <td>${esc(o.order_date)}</td>
-                    <td>${esc(o.expected_delivery)}</td>
-                </tr>`).join("");
-        } catch (e) { console.error(e); }
-    }
-
     function initTabs() {
-        const panels = ["sessions", "orders", "tickets", "bulk"];
+        const panels = ["sessions", "tickets", "bulk"];
         document.querySelectorAll(".tab").forEach(tab => {
             tab.addEventListener("click", () => {
                 document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -166,7 +154,6 @@
     function refreshAll() {
         loadStats();
         loadSessions();
-        loadOrders();
         loadTickets();
         loadBulkEnquiries();
     }

@@ -164,6 +164,132 @@ class SearchTests(unittest.TestCase):
         record = self.search._record("7", data)
         self.assertEqual(json.loads(self.search.format_results([record]))["products"][0]["features"], [])
 
+    def laptop_matches(self):
+        rows = [("1", "Laptops", "Asus Chromebook"),
+                ("2", "Windows Laptop", "HP Pavilion"),
+                ("3", "Gaming Laptop", "Dell G15"),
+                ("4", "MacBook Laptop", "Apple MacBook Air"),
+                ("5", "Convertible Laptop", "Lenovo Yoga"),
+                ("6", "Thin & Light Laptop", "Acer Swift"),
+                ("7", "Computer Accessories", "HP Laptop Backpack"),
+                ("8", "Double Door Refrigerator", "Samsung Refrigerator")]
+        self.search.index.query.return_value.matches = [
+            SimpleNamespace(id=pid, score=.9, metadata={
+                **metadata(pid), "category": category, "product_name": name})
+            for pid, category, name in rows]
+        return rows
+
+    @patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "false"})
+    def test_chat_laptop_search_uses_full_family_and_excludes_accessories(self):
+        rows = self.laptop_matches()
+        for query in ("laptop", "laptops", "show laptops under 50000",
+                      "I need a laptop. Can you help me choose the right one?",
+                      "\u092e\u0941\u091d\u0947 \u0932\u0948\u092a\u091f\u0949\u092a \u091a\u093e\u0939\u093f\u090f"):
+            with self.subTest(query=query):
+                products = self.search.search_products(query, top_k=6, price_max=50000)
+                self.assertEqual([p["product_id"] for p in products], [r[0] for r in rows[:6]])
+                filters = self.search.index.query.call_args.kwargs["filter"]
+                self.assertEqual(set(filters["category"]["$in"]), {r[1] for r in rows[:6]})
+                self.assertEqual(filters["price"], {"$lte": 50000})
+
+    @patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "false"})
+    def test_chat_laptop_subtypes_do_not_expand_to_all_laptops(self):
+        self.laptop_matches()
+        for query, expected in (("gaming laptop", "3"), ("gaming laptops", "3"),
+                                ("Windows laptop", "2"), ("Windows laptops", "2"),
+                                ("MacBook Laptop", "4"), ("convertible laptop", "5"),
+                                ("thin & light laptop", "6")):
+            with self.subTest(query=query):
+                products = self.search.search_products(query)
+                self.assertEqual([p["product_id"] for p in products], [expected])
+                self.assertEqual(self.search.index.query.call_args.kwargs["filter"]["category"],
+                                 {"$in": [products[0]["category"]]})
+
+    @patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "false"})
+    def test_explicit_laptop_category_supports_brand_and_budget_followups(self):
+        self.laptop_matches()
+        products = self.search.search_products("HP under 50000", category="laptop", top_k=6)
+        self.assertEqual(len(products), 6)
+        self.assertEqual(len(self.search.index.query.call_args.kwargs["filter"]["category"]["$in"]), 6)
+
+    @patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "false"})
+    def test_explicit_laptop_subtype_narrows_a_generic_query(self):
+        self.laptop_matches()
+        products = self.search.search_products("laptop", category="Gaming Laptop")
+        self.assertEqual([p["product_id"] for p in products], ["3"])
+
+    @patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "false"})
+    def test_conflicting_laptop_subtypes_cannot_remove_the_category_filter(self):
+        self.laptop_matches()
+        products = self.search.search_products("Windows laptop", category="Gaming Laptop")
+        self.assertEqual(products, [])
+        self.search.index.query.assert_not_called()
+        self.assertIsNotNone(self.search.last_error)
+
+    @patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "false"})
+    def test_explicit_accessory_request_is_not_treated_as_a_laptop(self):
+        self.laptop_matches()
+        self.search.index.query.return_value.matches = self.search.index.query.return_value.matches[-2:-1]
+        products = self.search.search_products("HP laptop backpack", category="Computer Accessories")
+        self.assertEqual([p["product_id"] for p in products], ["7"])
+        self.assertNotIn("category", self.search.index.query.call_args.kwargs["filter"])
+
+    @patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "false"})
+    def test_other_categories_keep_existing_search_behavior(self):
+        self.search.index.query.return_value.matches = [
+            SimpleNamespace(id="7", score=.9, metadata=metadata())]
+        for query in ("phone", "phone and TV"):
+            with self.subTest(query=query):
+                self.assertEqual(len(self.search.search_products(query)), 1)
+                self.assertNotIn("category", self.search.index.query.call_args.kwargs["filter"])
+
+    @patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "true"})
+    @patch("tools.product_search_tool.enrich")
+    def test_chat_laptop_category_is_checked_before_live_verification(self, enrich):
+        self.laptop_matches()
+        enrich.side_effect = lambda records, **kwargs: records[:kwargs["top_k"]]
+        products = self.search.search_products("laptops", top_k=6, price_max=50000, city="BHOPAL")
+        self.assertEqual(len(products), 6)
+        self.assertEqual([r["product_id"] for r in enrich.call_args.args[0]],
+                         ["1", "2", "3", "4", "5", "6"])
+        self.assertEqual(enrich.call_args.kwargs["city"], "BHOPAL")
+        self.assertEqual(enrich.call_args.kwargs["price_max"], 50000)
+        self.assertNotIn("price", self.search.index.query.call_args.kwargs["filter"])
+
+    @patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "true"})
+    @patch("tools.product_search_tool.enrich")
+    def test_laptop_budget_prioritizes_affordable_candidates_without_filtering_old_prices(self, enrich):
+        self.search.index.query.return_value.matches = [
+            SimpleNamespace(id=pid, score=.9, metadata={**metadata(pid),
+                "category": "Windows Laptop", "price": price})
+            for pid, price in (("1", 80000), ("2", 44000), ("3", 50000), ("4", 43000))]
+        enrich.return_value = []
+        self.search.search_products("office laptop", price_max=45000)
+        self.assertEqual([r["product_id"] for r in enrich.call_args.args[0]], ["2", "4", "3", "1"])
+        filters = self.search.index.query.call_args.kwargs["filter"]
+        self.assertNotIn("price", filters, "Discounted laptops must still receive a live check")
+        self.assertEqual(self.search.index.query.call_args.kwargs["top_k"], 60)
+
+    @patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "false"})
+    def test_chat_empty_laptop_search_does_not_substitute_other_categories(self):
+        self.laptop_matches()
+        self.search.index.query.return_value.matches = self.search.index.query.return_value.matches[-2:]
+        products = self.search.search_products("laptops")
+        response = json.loads(self.search.format_results(products, "laptops"))
+        self.assertEqual(response["products"], [])
+        self.assertTrue(response["search_metadata"]["no_results"])
+        self.assertNotIn("error", response)
+
+    @patch.dict(os.environ, {"LOTUS_LIVE_ENRICHMENT": "false"})
+    def test_chat_browse_and_recommend_laptops_use_the_same_family_filter(self):
+        self.laptop_matches()
+        with patch("tools.browse_catalog.product_search_instance", self.search), \
+             patch("tools.recommend_products.product_search_instance", self.search):
+            browse = browse_catalog_tool.invoke({"category": "laptop", "budget": 50000})
+            recommended = recommend_products_tool.invoke({"category": "laptop", "budget": 50000})
+        self.assertEqual([p["product_id"] for p in browse], ["1", "2", "3", "4", "5", "6"])
+        self.assertEqual([p["product_id"] for p in recommended], ["1", "2", "3", "4", "5"])
+
     def test_iphone_generation_accepts_catalogue_mobile_word(self):
         titles = ["Apple iPhone Mobile 18 Pro (1TB ROM) Black",
                   "Apple iPhone 18 Pro (256GB ROM) Silver",

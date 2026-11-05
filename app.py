@@ -10,6 +10,14 @@ from flask import (
 
 load_dotenv()
 
+# Some local/sandbox launchers inject a closed loopback proxy as a network-off
+# sentinel. It makes Gemini fail with WinError 10061. Ignore only that exact
+# unusable value; real deployment proxies remain untouched.
+for _proxy_name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                    "http_proxy", "https_proxy", "all_proxy"):
+    if os.environ.get(_proxy_name, "").strip().rstrip("/") == "http://127.0.0.1:9":
+        os.environ.pop(_proxy_name, None)
+
 # from agenticai_lotus import  LotusElectronicsBot
 # from try_agentic import chat_with_agent
 
@@ -17,10 +25,9 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", "lotus-dev-secret-change-me")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
-# SQLite store for chat logs, sessions and orders
+# SQLite store for chat logs, sessions, tickets and bulk enquiries
 import store
 store.init_db()
-store.seed_orders()
 # allow all origins; adjust in production as needed
 
 
@@ -264,12 +271,6 @@ def admin_session_detail(session_id):
         "session_id": session_id,
         "messages": store.get_chat_logs(session_id),
     })
-
-
-@app.route("/admin/api/orders", methods=["GET"])
-@admin_required
-def admin_orders():
-    return jsonify(store.get_orders())
 
 
 @app.route("/admin/api/tickets", methods=["GET"])
