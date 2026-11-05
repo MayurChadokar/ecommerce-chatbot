@@ -6,6 +6,34 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 _AMOUNT = r"(?:\d{1,3}(?:,\d{2,3})+|\d+(?:\.\d+)?)\s*(?:k|thousand|lakh|lac)?"
+
+
+def fast_unclear_message(message):
+    """Catch obvious keyboard noise without language models or dictionary guesses."""
+    if not isinstance(message, str) or not message.strip():
+        return None
+    text = message.strip()
+    noise = not any(char.isalnum() for char in text)
+    # Leave numbers/model codes and non-Latin languages to the normal chat path.
+    if not noise and text.isascii() and not any(char.isdigit() for char in text):
+        words = re.findall(r"[a-z]+", text.lower())
+        # Common abbreviations and Roman Hindi must not count as keyboard noise.
+        allowed = set("lg tv hp bpl tcl tcl qled oled led lcd hdr hdmi usb ssd hdd ram gb tb "
+                      "ac pc cpu gpu ups jbl dth emi mrp gst rs pls plz thx hmm hm hn "
+                      "h m kr krr pr b hi ji bhi nhi nh yr kya kyu".split())
+        suspicious = [word for word in words if len(word) >= 2
+                      and word not in allowed and not re.search(r"[aeiouy]", word)]
+        letters = sum(map(len, words))
+        noise = (letters >= 8 and len(suspicious) >= 2
+                 and sum(map(len, suspicious)) / letters >= 0.65)
+    if not noise:
+        return None
+    return {
+        "answer": "Aapka message clear nahi hua. Product, order ya support se related apna sawaal thoda detail mein batayein.",
+        "products": [], "product_details": {}, "stores": [], "policy_info": {},
+        "comparison": [], "recommendations": [], "ticket": {}, "bulk_enquiry": {},
+        "end": "",
+    }
 _CATEGORIES = {
     "smartphone": ("smartphone", "smartphones", "smart phone", "mobile", "mobiles", "phone", "phones"),
     "laptop": ("laptop", "laptops", "notebook", "notebooks"),
