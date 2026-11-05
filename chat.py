@@ -1157,17 +1157,24 @@ def chat_with_agent(message: str, session_id: str = "default_session", *,
     actions = {}
     if product_id is None:
         # Explicit recommendation ranges can skip two model round-trips.
-        from chat_fast_path import fast_budget_recommendation, fast_portable_ac_alternatives
+        from chat_fast_path import (fast_budget_recommendation,
+                                    fast_portable_ac_alternatives,
+                                    fast_replacement_policy,
+                                    fast_return_policy)
         try:
-            rows = store.get_chat_context(session_id)
-            previous_user_messages = [row["message"] for row in rows
-                                      if row.get("role") == "user" and row.get("message")]
-            fast_response = fast_portable_ac_alternatives(message, city=city)
+            fast_response = fast_replacement_policy(message)
             if fast_response is None:
-                fast_response = fast_budget_recommendation(
-                    message, previous_user_messages=previous_user_messages, city=city)
+                fast_response = fast_return_policy(message)
+            if fast_response is None:
+                rows = store.get_chat_context(session_id)
+                previous_user_messages = [row["message"] for row in rows
+                                          if row.get("role") == "user" and row.get("message")]
+                fast_response = fast_portable_ac_alternatives(message, city=city)
+                if fast_response is None:
+                    fast_response = fast_budget_recommendation(
+                        message, previous_user_messages=previous_user_messages, city=city)
         except Exception as fast_error:
-            print(f"Budget recommendation fast path failed: {type(fast_error).__name__}")
+            print(f"Local fast path failed: {type(fast_error).__name__}")
             fast_response = None
         if fast_response is not None:
             try:

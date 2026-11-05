@@ -124,6 +124,23 @@ def chat():
 
     try:
         store.record_session_source(session_id, source)
+        max_questions = store.get_max_user_questions()
+        if store.get_user_question_count(session_id) >= max_questions:
+            limit_answer = (
+                "For further information, please visit your nearest Lotus Electronics store "
+                "or visit https://www.lotuselectronics.com/"
+            )
+            limit_response = {
+                "answer": limit_answer,
+                "products": [], "product_details": {}, "stores": [], "policy_info": {},
+                "comparison": [], "recommendations": [], "ticket": {}, "bulk_enquiry": {},
+                "end": "",
+                "chat_limit_reached": True,
+            }
+            response_json = json.dumps(limit_response, ensure_ascii=False)
+            store.log_message(session_id, "user", message)
+            store.log_message(session_id, "assistant", limit_answer, response_json=response_json)
+            return jsonify({"status": "success", "data": limit_response})
         ai_reply = chat_with_agent(message, session_id, **selection)
         data = json.loads(ai_reply)
         
@@ -284,6 +301,19 @@ def admin_session_detail(session_id):
 @admin_required
 def admin_tickets():
     return jsonify(store.get_tickets())
+
+
+@app.route("/admin/api/settings", methods=["GET", "POST"])
+@admin_required
+def admin_settings():
+    if request.method == "GET":
+        return jsonify({"max_user_questions": store.get_max_user_questions()})
+    payload = request.get_json(silent=True) or {}
+    value = payload.get("max_user_questions")
+    if type(value) is not int or not 1 <= value <= 1000:
+        return jsonify({"error": "max_user_questions must be an integer between 1 and 1000"}), 400
+    store.set_setting("max_user_questions", str(value))
+    return jsonify({"success": True, "max_user_questions": value})
 
 
 @app.route("/admin/api/bulk-enquiries", methods=["GET"])

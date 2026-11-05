@@ -210,6 +210,24 @@ tbody tr.active { background: #e3edfd; }
 
 .order-id { font-family: ui-monospace, Menlo, monospace; font-weight: 600; color: var(--brand); }
 
+.settings-card { max-width: 650px; }
+.settings-form { padding: 22px; }
+.settings-form label { display: block; font-weight: 600; margin-bottom: 7px; }
+.settings-form p { font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
+.settings-row { display: flex; gap: 10px; align-items: center; }
+.settings-row input {
+    width: 150px; padding: 11px 12px; border: 1px solid var(--border);
+    border-radius: 9px; font-size: 15px;
+}
+.settings-row input:focus { outline: none; border-color: var(--brand); }
+.save-btn {
+    border: 0; border-radius: 9px; background: var(--brand); color: #fff;
+    padding: 11px 18px; font-weight: 600; cursor: pointer;
+}
+.settings-status { min-height: 20px; margin-top: 12px; font-size: 13px; }
+.settings-status.success { color: #2e7d32; }
+.settings-status.error { color: #c62828; }
+
 @media (max-width: 820px) {
     .stats { grid-template-columns: 1fr; }
     .panel-grid { grid-template-columns: 1fr; }

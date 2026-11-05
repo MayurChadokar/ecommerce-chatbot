@@ -82,7 +82,16 @@ def init_db() -> None:
                     shown_message_id INTEGER,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    setting_key TEXT PRIMARY KEY,
+                    setting_value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 """
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+                ("max_user_questions", "20", datetime.utcnow().isoformat()),
             )
             columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
             if "source" not in columns:
@@ -247,6 +256,50 @@ def get_chat_context(session_id: str, limit: int = 40) -> List[Dict[str, Any]]:
             "WHERE l.session_id=? ORDER BY l.id DESC LIMIT ?", (session_id, limit)
         ).fetchall()
         return [dict(row) for row in reversed(rows)]
+
+
+def get_user_question_count(session_id: str) -> int:
+    """Number of questions already submitted by this browser/app session."""
+    if not session_id:
+        return 0
+    try:
+        with closing(_connect()) as conn:
+            return int(conn.execute(
+                "SELECT COUNT(*) FROM chat_logs WHERE session_id=? AND role='user'",
+                (session_id,),
+            ).fetchone()[0])
+    except Exception as e:
+        print(f"store.get_user_question_count failed: {type(e).__name__}: {e}")
+        return 0
+
+
+def get_setting(key: str, default: str = "") -> str:
+    try:
+        with closing(_connect()) as conn:
+            row = conn.execute(
+                "SELECT setting_value FROM app_settings WHERE setting_key=?", (key,)
+            ).fetchone()
+            return str(row[0]) if row else default
+    except Exception as e:
+        print(f"store.get_setting failed: {type(e).__name__}: {e}")
+        return default
+
+
+def set_setting(key: str, value: str) -> None:
+    with closing(_connect()) as conn, conn:
+        conn.execute(
+            "INSERT INTO app_settings (setting_key,setting_value,updated_at) VALUES (?,?,?) "
+            "ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value, "
+            "updated_at=excluded.updated_at",
+            (key, str(value), datetime.utcnow().isoformat()),
+        )
+
+
+def get_max_user_questions() -> int:
+    try:
+        return max(1, int(get_setting("max_user_questions", "20")))
+    except (TypeError, ValueError):
+        return 20
 
 
 def create_bulk_enquiry(session_id: str, details: Dict[str, Any]) -> Dict[str, Any]:

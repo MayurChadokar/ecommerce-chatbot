@@ -8,6 +8,55 @@ from typing import Iterable, Optional
 _AMOUNT = r"(?:\d{1,3}(?:,\d{2,3})+|\d+(?:\.\d+)?)\s*(?:k|thousand|lakh|lac)?"
 
 
+def fast_replacement_policy(message):
+    """Answer replacement-policy questions from verified local policy text."""
+    if not isinstance(message, str):
+        return None
+    text = message.strip()
+    if not re.search(r"\b(?:replacement|replace|replaced)\b", text, re.I):
+        return None
+
+    answer = (
+        "Lotus Electronics asks customers to check the product and accessories when accepting delivery. "
+        "A replacement may be requested for a short shipment or defective product, subject to product availability, "
+        "and only for products sold by Lotus Electronics. Contact Lotus customer service promptly to report the issue "
+        "and confirm whether the product qualifies for replacement. "
+        "A product may be ineligible if it has physical damage, is missing its original packaging or accessories, "
+        "has a missing or altered serial number, or has had its UPC removed. Final replacement approval remains with "
+        "Lotus Electronics. Official policies: https://www.lotuselectronics.com/return-policy and "
+        "https://www.lotuselectronics.com/terms-condition"
+    )
+    return {
+        "answer": answer,
+        "products": [], "product_details": {}, "stores": [], "policy_info": {},
+        "comparison": [], "recommendations": [], "ticket": {}, "bulk_enquiry": {},
+        "end": "For confirmation, contact Lotus customer service at 0731 4265577 or customerservices@lotuselectronics.com.",
+    }
+
+
+def fast_return_policy(message):
+    """Answer return/refund-policy questions without quoting disputed deadlines."""
+    if not isinstance(message, str):
+        return None
+    text = message.strip()
+    if not re.search(r"\b(?:return|refund)\b", text, re.I):
+        return None
+
+    answer = (
+        "Lotus Electronics may accept an unopened product in its original packaging with the original invoice. "
+        "Shipping costs are not refunded and return transportation charges may be deducted. If a returned product "
+        "is found used or tampered with, Lotus may deduct charges based on its condition. Approved refunds are made "
+        "through the original payment method or the applicable Lotus account or wallet. Eligibility and final approval "
+        "remain with Lotus Electronics. Official policy: https://www.lotuselectronics.com/return-policy"
+    )
+    return {
+        "answer": answer,
+        "products": [], "product_details": {}, "stores": [], "policy_info": {},
+        "comparison": [], "recommendations": [], "ticket": {}, "bulk_enquiry": {},
+        "end": "For confirmation, contact Lotus customer service at 0731 4265577 or customerservices@lotuselectronics.com.",
+    }
+
+
 def fast_unclear_message(message):
     """Catch obvious keyboard noise without language models or dictionary guesses."""
     if not isinstance(message, str) or not message.strip():
@@ -172,5 +221,6 @@ def fast_portable_ac_alternatives(message: str, city="INDORE"):
             "end": "You can check with a Lotus store for availability outside the online catalogue."}
 
 
-__all__ = ["BudgetRange", "fast_unclear_message", "parse_budget_range", "fast_budget_recommendation",
+__all__ = ["BudgetRange", "fast_unclear_message", "fast_replacement_policy", "fast_return_policy",
+           "parse_budget_range", "fast_budget_recommendation",
            "fast_portable_ac_alternatives"]

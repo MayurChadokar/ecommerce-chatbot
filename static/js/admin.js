@@ -23,6 +23,18 @@
         return res.json();
     }
 
+    async function saveJSON(url, payload) {
+        const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (res.status === 401) { window.location.href = "/admin"; return null; }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Request failed: " + res.status);
+        return data;
+    }
+
     function fmtTime(iso) {
         if (!iso) return "";
         const d = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
@@ -98,7 +110,7 @@
     }
 
     function initTabs() {
-        const panels = ["sessions", "tickets"];
+        const panels = ["sessions", "tickets", "settings"];
         document.querySelectorAll(".tab").forEach(tab => {
             tab.addEventListener("click", () => {
                 document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -109,6 +121,36 @@
                     if (el) el.style.display = which === p ? "" : "none";
                 });
             });
+        });
+    }
+
+    async function loadSettings() {
+        try {
+            const settings = await getJSON("/admin/api/settings");
+            if (settings && $("maxUserQuestions")) {
+                $("maxUserQuestions").value = settings.max_user_questions;
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    function initSettings() {
+        const form = $("chatLimitForm");
+        if (!form) return;
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const status = $("settingsStatus");
+            const value = Number($("maxUserQuestions").value);
+            status.textContent = "Saving...";
+            status.className = "settings-status";
+            try {
+                const result = await saveJSON("/admin/api/settings", { max_user_questions: value });
+                if (!result) return;
+                status.textContent = `Saved. Each person can ask ${result.max_user_questions} questions.`;
+                status.className = "settings-status success";
+            } catch (e) {
+                status.textContent = e.message;
+                status.className = "settings-status error";
+            }
         });
     }
 
@@ -137,10 +179,12 @@
         loadStats();
         loadSessions();
         loadTickets();
+        loadSettings();
     }
 
     document.addEventListener("DOMContentLoaded", () => {
         initTabs();
+        initSettings();
         refreshAll();
         const rb = $("refreshBtn");
         if (rb) rb.addEventListener("click", refreshAll);

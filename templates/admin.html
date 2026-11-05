@@ -53,6 +53,7 @@
         <div class="tabs">
             <button class="tab active" data-tab="sessions"><i class="fas fa-comments"></i> Sessions &amp; Chats</button>
             <button class="tab" data-tab="tickets"><i class="fas fa-headset"></i> Tickets</button>
+            <button class="tab" data-tab="settings"><i class="fas fa-sliders"></i> Chat Settings</button>
         </div>
 
         <!-- Sessions view -->
@@ -86,9 +87,24 @@
                 </div>
             </div>
         </section>
+
+        <section id="tab-settings" style="display:none">
+            <div class="card settings-card">
+                <div class="card-head"><i class="fas fa-message"></i> Per-person chat limit</div>
+                <form id="chatLimitForm" class="settings-form">
+                    <label for="maxUserQuestions">Maximum questions per person</label>
+                    <p class="muted">After this many questions, the chatbot stops AI processing and asks the visitor to visit the nearest Lotus Electronics store.</p>
+                    <div class="settings-row">
+                        <input id="maxUserQuestions" type="number" min="1" max="1000" required>
+                        <button type="submit" class="save-btn">Save limit</button>
+                    </div>
+                    <div id="settingsStatus" class="settings-status" aria-live="polite"></div>
+                </form>
+            </div>
+        </section>
     </main>
 
-    <script src="/static/js/admin.js?v=20261105-remove-bulk"></script>
+    <script src="/static/js/admin.js?v=20261105-chat-limit"></script>
 {% endif %}
 </body>
 
