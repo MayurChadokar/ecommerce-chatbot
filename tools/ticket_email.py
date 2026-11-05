@@ -1,10 +1,12 @@
-"""Best-effort SMTP notifications for newly saved support tickets."""
+"""Best-effort SMTP or Mailgun API notifications for saved support tickets."""
 from email.message import EmailMessage
 from datetime import datetime, timezone
 import html
 import logging
 import os
 from pathlib import Path
+import re
+import requests
 import smtplib
 import threading
 from zoneinfo import ZoneInfo
@@ -38,12 +40,48 @@ def _port() -> int:
         return 587
 
 
-def _timeout() -> float:
+def _timeout(name="SMTP_TIMEOUT") -> float:
     try:
-        value = float(os.getenv("SMTP_TIMEOUT", "30"))
+        value = float(os.getenv(name, "30"))
         return value if 5 <= value <= 60 else 30
     except ValueError:
         return 30
+
+
+def _send_mailgun(message, ticket_id):
+    key = os.getenv("MAILGUN_API_KEY", "").strip()
+    domain = os.getenv("MAILGUN_DOMAIN", "").strip()
+    region = os.getenv("MAILGUN_REGION", "us").strip().lower()
+    if (not key or not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", domain)
+            or region not in {"us", "eu"}):
+        logger.error("Mailgun configuration incomplete or invalid: check API key, domain and region")
+        return False
+    host = "api.eu.mailgun.net" if region == "eu" else "api.mailgun.net"
+    data = {
+        "from": str(message["From"]), "to": str(message["To"]),
+        "subject": str(message["Subject"]),
+        "text": message.get_body(preferencelist=("plain",)).get_content(),
+        "html": message.get_body(preferencelist=("html",)).get_content().replace(
+            "cid:lotus-logo", "cid:lotus-logo.png"),
+    }
+    if message["Cc"]:
+        data["cc"] = str(message["Cc"])
+    files = [("inline", ("lotus-logo.png", part.get_payload(decode=True), "image/png"))
+             for part in message.walk() if part.get("Content-ID") == "<lotus-logo>"]
+    try:
+        with requests.post(
+            f"https://{host}/v3/{domain}/messages", auth=("api", key),
+            data=data, files=files or None, timeout=_timeout("MAILGUN_TIMEOUT"),
+            allow_redirects=False,
+        ) as response:
+            if not 200 <= response.status_code < 300:
+                logger.error("Mailgun rejected ticket email ticket_id=%s status=%s",
+                             ticket_id, response.status_code)
+                return False
+        return True
+    except requests.RequestException:
+        logger.error("Mailgun request failed ticket_id=%s", ticket_id)
+        return False
 
 
 def send_ticket_email(ticket: dict) -> bool:
@@ -54,9 +92,14 @@ def send_ticket_email(ticket: dict) -> bool:
     recipient = os.getenv("SUPPORT_TICKET_EMAIL_TO", DEFAULT_RECIPIENT).strip()
     cc = [address.strip() for address in
           os.getenv("SUPPORT_TICKET_EMAIL_CC", "").split(",") if address.strip()]
-    sender = os.getenv("SMTP_FROM", user).strip()
-    if not all((host, user, password, recipient, sender)):
-        logger.info("Support ticket email skipped: SMTP configuration incomplete")
+    provider = os.getenv("TICKET_EMAIL_PROVIDER", "smtp").strip().lower()
+    sender = (os.getenv("MAILGUN_FROM", "") if provider == "mailgun"
+              else os.getenv("SMTP_FROM", user)).strip()
+    if provider not in {"smtp", "mailgun"}:
+        logger.error("Unsupported TICKET_EMAIL_PROVIDER")
+        return False
+    if not all((recipient, sender)) or (provider == "smtp" and not all((host, user, password))):
+        logger.info("Support ticket email skipped: email configuration incomplete")
         return False
 
     created_at_ist = _format_created_at(ticket.get("created_at"))
@@ -116,6 +159,9 @@ def send_ticket_email(ticket: dict) -> bool:
             cid="<lotus-logo>", filename="lotus-logo.png", disposition="inline")
     except OSError:
         logger.warning("Lotus email logo unavailable at %s", LOGO_PATH)
+
+    if provider == "mailgun":
+        return _send_mailgun(message, ticket.get("ticket_id", "unknown"))
 
     encryption = os.getenv("SMTP_ENCRYPTION", "tls").strip().casefold()
     try:
