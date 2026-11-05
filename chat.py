@@ -1147,6 +1147,13 @@ def chat_with_agent(message: str, session_id: str = "default_session", *,
     Wraps `_run_agent` so every turn's assistant answer is logged to SQLite for
     the admin portal. Logging failures never affect the returned response.
     """
+    from chat_fast_path import fast_unclear_message
+    unclear = fast_unclear_message(message) if product_id is None else None
+    if unclear is not None:
+        response = json.dumps(unclear, ensure_ascii=False)
+        store.log_message(session_id, "user", message)
+        store.log_message(session_id, "assistant", unclear["answer"], response_json=response)
+        return response
     actions = {}
     if product_id is None:
         # Explicit recommendation ranges can skip two model round-trips.

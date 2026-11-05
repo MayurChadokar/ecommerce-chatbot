@@ -459,10 +459,8 @@ def seed_orders() -> None:
 # --------------------------------------------------------------------------- #
 def create_ticket(session_id: Optional[str], name: str, phone: str, issue: str) -> Dict[str, Any]:
     """Create a support ticket and return it."""
-    ticket_id = "TCKT" + str(random.randint(10000, 99999))
     created = datetime.utcnow()
     record = {
-        "ticket_id": ticket_id,
         "session_id": session_id,
         "name": (name or "").strip(),
         "phone": (phone or "").strip(),
@@ -471,7 +469,23 @@ def create_ticket(session_id: Optional[str], name: str, phone: str, issue: str) 
         "created_at": created.isoformat(),
     }
     try:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
+            # Allocate and insert under the same lock across all Gunicorn workers.
+            # A failed insert rolls back the counter as well as the ticket.
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("CREATE TABLE IF NOT EXISTS ticket_sequence "
+                         "(id INTEGER PRIMARY KEY CHECK (id = 1), last_number INTEGER NOT NULL)")
+            sequence = conn.execute("SELECT last_number FROM ticket_sequence WHERE id=1").fetchone()
+            if sequence is None:
+                highest = 1000
+                for row in conn.execute("SELECT ticket_id FROM tickets WHERE ticket_id LIKE 'TCKT-%'"):
+                    suffix = row[0][5:]
+                    if suffix.isascii() and suffix.isdigit():
+                        highest = max(highest, int(suffix))
+                conn.execute("INSERT INTO ticket_sequence VALUES (1, ?)", (highest,))
+            conn.execute("UPDATE ticket_sequence SET last_number=last_number+1 WHERE id=1")
+            number = conn.execute("SELECT last_number FROM ticket_sequence WHERE id=1").fetchone()[0]
+            record["ticket_id"] = f"TCKT-{number:06d}"
             conn.execute(
                 "INSERT INTO tickets (ticket_id, session_id, name, phone, issue, "
                 "status, created_at) VALUES (:ticket_id, :session_id, :name, :phone, "
@@ -479,7 +493,9 @@ def create_ticket(session_id: Optional[str], name: str, phone: str, issue: str) 
                 record,
             )
     except Exception as e:  # pragma: no cover - defensive
-        print(f"❌ store.create_ticket failed: {type(e).__name__}: {e}")
+        print(f"store.create_ticket failed: {type(e).__name__}: {e}")
+        return {"error": "The ticket could not be saved. Please try again.",
+                "error_code": "ticket_creation_failed"}
     out = dict(record)
     out["created_date"] = created.strftime("%d %b %Y, %I:%M %p")
     return out
