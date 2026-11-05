@@ -14,22 +14,35 @@ def fast_unclear_message(message):
         return None
     text = message.strip()
     noise = not any(char.isalnum() for char in text)
-    # Leave numbers/model codes and non-Latin languages to the normal chat path.
-    if not noise and text.isascii() and not any(char.isdigit() for char in text):
-        words = re.findall(r"[a-z]+", text.lower())
+    # Inspect Latin words even when they are mixed with Hindi or another script.
+    # Product model codes containing digits are excluded from the ratio so a
+    # legitimate query such as "Samsung S24 price" is not rejected.
+    if not noise:
+        words = re.findall(r"(?<![a-z0-9])[a-z]+(?![a-z0-9])", text.lower())
         # Common abbreviations and Roman Hindi must not count as keyboard noise.
         allowed = set("lg tv hp bpl tcl tcl qled oled led lcd hdr hdmi usb ssd hdd ram gb tb "
                       "ac pc cpu gpu ups jbl dth emi mrp gst rs pls plz thx hmm hm hn "
-                      "h m kr krr pr b hi ji bhi nhi nh yr kya kyu".split())
+                      "h m kr krr pr b hi ji bhi nhi nh yr kya kyu bhai haan hai na "
+                      "aur se ko ka ki ke me main mera chahiye batao dikhao".split())
         suspicious = [word for word in words if len(word) >= 2
-                      and word not in allowed and not re.search(r"[aeiouy]", word)]
+                      and word not in allowed
+                      and (not re.search(r"[aeiou]", word)
+                           or re.search(r"[^aeiou]{4,}", word)
+                           or (len(word) >= 5
+                               and len(re.findall(r"[aeiou]", word)) / len(word) <= .2))]
         letters = sum(map(len, words))
         noise = (letters >= 8 and len(suspicious) >= 2
                  and sum(map(len, suspicious)) / letters >= 0.65)
     if not noise:
         return None
+    has_hindi = bool(re.search(r"[\u0900-\u097f]", text))
+    answer = (
+        "आपका संदेश स्पष्ट नहीं है। कृपया प्रोडक्ट या सहायता से जुड़ा अपना सवाल थोड़ा विस्तार से लिखें।"
+        if has_hindi else
+        "Your message was not clear. Please describe your product or support question in a little more detail."
+    )
     return {
-        "answer": "Aapka message clear nahi hua. Product, order ya support se related apna sawaal thoda detail mein batayein.",
+        "answer": answer,
         "products": [], "product_details": {}, "stores": [], "policy_info": {},
         "comparison": [], "recommendations": [], "ticket": {}, "bulk_enquiry": {},
         "end": "",
@@ -159,5 +172,5 @@ def fast_portable_ac_alternatives(message: str, city="INDORE"):
             "end": "You can check with a Lotus store for availability outside the online catalogue."}
 
 
-__all__ = ["BudgetRange", "parse_budget_range", "fast_budget_recommendation",
+__all__ = ["BudgetRange", "fast_unclear_message", "parse_budget_range", "fast_budget_recommendation",
            "fast_portable_ac_alternatives"]
