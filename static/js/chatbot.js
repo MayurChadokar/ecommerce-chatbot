@@ -219,7 +219,8 @@ class ChatBot {
             mode: 'cors',
             body: JSON.stringify({
                 message: userMessage,
-                session_id: this.sessionId
+                session_id: this.sessionId,
+                source: 'web'
             })
         };
 

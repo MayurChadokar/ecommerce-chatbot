@@ -91,7 +91,8 @@ async function sendToBot(userMessage) {
             },
             body: JSON.stringify({
                 message: userMessage,
-                session_id: sessionId
+                session_id: sessionId,
+                source: 'web'
             })
         });
 

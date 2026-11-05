@@ -55,12 +55,13 @@
             if (!sessions) return;
             const body = $("sessionsBody");
             if (!sessions.length) {
-                body.innerHTML = '<tr><td colspan="3" class="muted center">No sessions yet. Chat with the bot first.</td></tr>';
+                body.innerHTML = '<tr><td colspan="4" class="muted center">No sessions yet. Chat with the bot first.</td></tr>';
                 return;
             }
             body.innerHTML = sessions.map(s => `
                 <tr data-sid="${esc(s.session_id)}">
                     <td class="sess-id">${esc(s.session_id).slice(0, 13)}…</td>
+                    <td>${s.source === 'web' ? 'Web' : s.source === 'app' ? 'App' : 'Unknown'}</td>
                     <td>${s.message_count}</td>
                     <td>${fmtTime(s.last_active)}</td>
                 </tr>`).join("");

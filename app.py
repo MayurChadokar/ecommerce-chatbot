@@ -103,6 +103,12 @@ def chat():
     if not message:
         return jsonify({"error": "Missing 'message' in request"}), 400
 
+    # Website clients identify themselves; unmarked clients count as App.
+    source = payload.get("source", "app")
+    if not isinstance(source, str) or source.strip().lower() not in {"web", "app", "unknown"}:
+        return jsonify({"error": "source must be web or app"}), 400
+    source = source.strip().lower()
+
     # Product-card selections carry identity separately from the display name.
     selection = {}
     if "product_id" in payload:
@@ -117,6 +123,7 @@ def chat():
         selection = {"product_id": int(product_id), "city": city.strip().upper()}
 
     try:
+        store.record_session_source(session_id, source)
         ai_reply = chat_with_agent(message, session_id, **selection)
         data = json.loads(ai_reply)
         

@@ -84,6 +84,9 @@ def init_db() -> None:
                 );
                 """
             )
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+            if "source" not in columns:
+                conn.execute("ALTER TABLE sessions ADD COLUMN source TEXT NOT NULL DEFAULT 'unknown'")
     except Exception as e:  # pragma: no cover - defensive
         print(f"❌ store.init_db failed: {type(e).__name__}: {e}")
 
@@ -97,7 +100,7 @@ def log_message(session_id: str, role: str, message: str, response_json: Optiona
         return
     now = datetime.utcnow().isoformat()
     try:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             cursor = conn.execute(
                 "INSERT INTO chat_logs (session_id, role, message, created_at) "
                 "VALUES (?, ?, ?, ?)",
@@ -120,11 +123,28 @@ def log_message(session_id: str, role: str, message: str, response_json: Optiona
         print(f"❌ store.log_message failed: {type(e).__name__}: {e}")
 
 
+def record_session_source(session_id: str, source: str) -> None:
+    """Record the client-reported origin once; do not guess historic origins."""
+    if source not in {"web", "app", "unknown"}:
+        raise ValueError("source must be web, app or unknown")
+    now = datetime.utcnow().isoformat()
+    try:
+        with closing(_connect()) as conn, conn:
+            conn.execute(
+                "INSERT INTO sessions (session_id,created_at,last_active,message_count,source) "
+                "VALUES (?,?,?,0,?) ON CONFLICT(session_id) DO UPDATE SET "
+                "source=CASE WHEN sessions.source='unknown' THEN excluded.source ELSE sessions.source END",
+                (session_id, now, now, source),
+            )
+    except Exception as e:
+        print(f"store.record_session_source failed: {type(e).__name__}: {e}")
+
+
 def get_sessions() -> List[Dict[str, Any]]:
     try:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             rows = conn.execute(
-                "SELECT session_id, created_at, last_active, message_count "
+                "SELECT session_id, created_at, last_active, message_count, source "
                 "FROM sessions ORDER BY last_active DESC"
             ).fetchall()
             return [dict(r) for r in rows]

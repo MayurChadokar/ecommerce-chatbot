@@ -816,6 +816,7 @@ class ChatBot {
             body: JSON.stringify({
                 message: userMessage,
                 session_id: this.sessionId,
+                source: 'web',
                 ...(selection || {})
             })
         };
