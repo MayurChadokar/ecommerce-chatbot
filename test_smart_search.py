@@ -581,6 +581,17 @@ class SmartTests(unittest.TestCase):
         with self.assertRaises(SearchUnavailable):
             self.search.search("Samsung fridge under 40k")
 
+    def test_unverified_candidate_is_skipped_for_later_verified_product(self):
+        self.catalogue.index.query.return_value.matches = [match("1"), match("2")]
+        self.fetch.side_effect = lambda pid, city: (
+            {"error": "down"} if str(pid) == "1" else detail(pid, city, 39999)
+        )
+        result = self.search.search("Samsung fridge under 85000", page_size=1)
+        self.assertEqual([product["product_id"] for product in result["products"]], ["2"])
+        self.assertEqual(result["verification"]["priceUnverifiedCount"], 1)
+        self.assertFalse(result["verification"]["complete"])
+        self.assertFalse(result["products"][0].get("catalogue_fallback", False))
+
     def test_prices_refreshed_each_request(self):
         self.search.search("Samsung fridge")
         self.fetch.side_effect = lambda pid, city: detail(pid, city, 30000)
