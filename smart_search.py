@@ -727,6 +727,23 @@ class SmartSearch:
         # not depend on a provider deciding which product category it belongs to.
         if base.brands and not (base.categories or base.attributes or base.preferences):
             return base, normalized, corrections, None, "catalogue"
+        # A broad family may contain source buckets which a known brand does
+        # not sell (for example, Dell + the complete laptop family includes
+        # MacBook). If the catalogue has a direct, unambiguous subset for that
+        # brand, resolve the intersection locally instead of asking the model
+        # to repeatedly guess an incomplete family. Keep compound-brand cases
+        # on the semantic path so requests such as Voltas washing machines can
+        # still resolve to Voltas Beko.
+        if (brand_match == "family" and len(base.brands) == 1 and len(base.categories) > 1
+                and not (base.attributes or base.preferences or corrections)):
+            requested_brand = base.brands[0]
+            pairs = taxonomy.get("brandCategories", {})
+            direct_categories = set(base.categories).intersection(pairs.get(requested_brand, []))
+            compound_variants = [brand for brand in pairs if brand != requested_brand
+                                 and catalogue_variant(requested_brand, brand, base.categories, taxonomy)]
+            if direct_categories and direct_categories != set(base.categories) and not compound_variants:
+                base.categories = sorted(direct_categories)
+                return base, normalized, corrections, None, "catalogue"
         # Android is an exact storefront product type, not an ambiguous phone family.
         # Resolve it locally so iPhone and feature-phone categories cannot leak in.
         if (base.categories == ["Android Smartphone"] and not base.brands

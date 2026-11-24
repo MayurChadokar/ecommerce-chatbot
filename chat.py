@@ -973,15 +973,20 @@ def _run_agent(message: str, session_id: str = "default_session", *, actions=Non
                         
                         # Check for direct answer field with nested JSON
                         if 'answer' in data_dict and isinstance(data_dict['answer'], str):
-                            try:
-                                # Try to parse answer as JSON first
-                                nested_json = json.loads(data_dict['answer'])
-                                if isinstance(nested_json, dict):
-                                    # Recursively process the nested JSON
-                                    nested_json = parse_nested_structure(nested_json)
-                                    return nested_json
-                            except (json.JSONDecodeError, TypeError) as e:
-                                print(f"🔧 Failed to parse direct answer as JSON: {e}")
+                            answer = data_dict['answer'].lstrip()
+                            # Most answers are ordinary prose. Only attempt a
+                            # nested parse when the value can actually be JSON;
+                            # otherwise every successful response emits a noisy
+                            # and misleading parse-failure log line.
+                            if answer.startswith(('{', '[')):
+                                try:
+                                    nested_json = json.loads(answer)
+                                    if isinstance(nested_json, dict):
+                                        # Recursively process the nested JSON
+                                        nested_json = parse_nested_structure(nested_json)
+                                        return nested_json
+                                except (json.JSONDecodeError, TypeError) as e:
+                                    print(f"🔧 Failed to parse direct answer as JSON: {e}")
                         
                         # Process product_details output field if present at any level
                         if 'product_details' in data_dict and isinstance(data_dict['product_details'], dict):

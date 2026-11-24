@@ -106,6 +106,22 @@ class SmartTests(unittest.TestCase):
         self.ai.with_structured_output.assert_not_called()
         self.assertNotIn("category", self.catalogue.index.query.call_args.kwargs["filter"])
 
+    def test_known_brand_and_broad_family_uses_catalogue_intersection_without_ai(self):
+        categories = self.configure_laptops()
+        self.search.taxonomy["brandCategories"] = {
+            "Asus": [category for category in categories
+                     if category not in {"Laptops", "MacBook Laptop"}],
+        }
+        result = self.search.search("Asus laptops", category="all", page_size=6)
+        self.assertEqual(result["interpretationSource"], "catalogue")
+        self.assertEqual(result["appliedFilters"]["brands"], ["Asus"])
+        self.assertEqual(
+            result["appliedFilters"]["categories"],
+            ["Convertible Laptop", "Gaming Laptop", "Thin & Light Laptop", "Windows Laptop"],
+        )
+        self.assertEqual(result["corrections"], [])
+        self.ai.with_structured_output.assert_not_called()
+
     def test_brand_with_unknown_product_function_still_stops_before_retrieval(self):
         self.ai.with_structured_output.return_value.invoke.return_value = dict(
             brands=["Samsung"], categories=[], price_min=None, price_max=None,
