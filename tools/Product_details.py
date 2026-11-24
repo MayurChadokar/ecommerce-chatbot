@@ -60,6 +60,20 @@ def fetch_live_details(product_id: int, city: str = "INDORE") -> Dict[str, Any]:
             return unavailable
         images = detail.get("product_image")
         image = (images[0] if images else "") if isinstance(images, list) else (images or "")
+        raw_web_display = detail.get("web_display")
+        web_display_verified = raw_web_display is not None
+        web_display = (str(raw_web_display).strip().casefold() in {"yes", "true", "1"}
+                       if web_display_verified else None)
+        if web_display_verified and not web_display:
+            return {
+                "product_id": str(product_id),
+                "error": "This product is not enabled for display on the website.",
+                "error_code": "web_display_disabled",
+                "web_display": False,
+                "web_display_verified": True,
+                "web_display_source": "live_api",
+                **availability_fields(city=city),
+            }
         return {
             **{key: detail.get(key) for key in (
                 "product_id", "product_name", "uri_slug", "product_sku",
@@ -71,6 +85,11 @@ def fetch_live_details(product_id: int, city: str = "INDORE") -> Dict[str, Any]:
             "checked_at": datetime.now(timezone.utc).isoformat(),
             "price_verified": "selling_price" in pricing_fields(detail),
             "price_source": "live_api" if "selling_price" in pricing_fields(detail) else "unverified",
+            # Visibility is a separate live eligibility fact. An explicit OFF
+            # product must never become a catalogue fallback with a broken URL.
+            "web_display": web_display,
+            "web_display_verified": web_display_verified,
+            "web_display_source": "live_api" if web_display_verified else "unverified",
             **pricing_fields(detail),
             **availability_fields(detail.get("instock"), live=True, city=city),
         }
@@ -106,6 +125,8 @@ def get_filtered_product_details_tool(product_id: int, city: str = "INDORE") -> 
     An index fallback provides specifications/prices only, never verified availability.
     """
     detail = fetch_live_details(product_id, city)
+    if detail.get("error_code") == "web_display_disabled":
+        return detail
     if not detail.get("error"):
         return detail
     fallback = _fallback_details(product_id)

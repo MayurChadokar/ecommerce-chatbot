@@ -77,6 +77,10 @@ class ProductSearchTool:
         if (metadata.get("source") != "sql_snapshot"
                 or metadata.get("embedding_model") != EMBEDDING_MODEL):
             return None
+        # New namespaces are filtered in Pinecone as well. Keep this defensive
+        # guard for direct fetches and for stale/mixed query responses.
+        if "web_display" in metadata and str(metadata.get("web_display")).strip().upper() != "YES":
+            return None
         return {
             "id": str(pid), "product_id": str(pid), "score": round(score, 4),
             "product_name": name, "price": price,
@@ -84,6 +88,7 @@ class ProductSearchTool:
             "product_url": link, "image_url": metadata.get("image_url", ""),
             "description": metadata.get("text", ""), "features": metadata.get("features", []),
             "brand": metadata.get("brand", ""), "category": metadata.get("category", ""),
+            "web_display": metadata.get("web_display"),
             "instock": metadata.get("instock", "Unknown"), "source": "sql_snapshot",
             **pricing_fields(metadata),
         }
@@ -185,7 +190,8 @@ class ProductSearchTool:
         self.last_error = None
         try:
             filters = {"source": {"$eq": "sql_snapshot"},
-                       "embedding_model": {"$eq": EMBEDDING_MODEL}}
+                       "embedding_model": {"$eq": EMBEDDING_MODEL},
+                       "web_display": {"$eq": "YES"}}
             categories = self._laptop_categories(query, category)
             if categories:
                 filters["category"] = {"$in": categories}

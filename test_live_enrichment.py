@@ -29,13 +29,15 @@ def metadata(pid="1", price=36999):
             "url": "samsung-fridge", "features": ["Capacity: 301 Litres"], "price": price,
             "price_field": "product_mrp", "product_mrp": price, "product_msrp": 50000,
             "eff_price": 30000, "source": "sql_snapshot", "embedding_model": EMBEDDING_MODEL,
-            "instock": "Yes"}
+            "web_display": "YES", "instock": "Yes"}
 
 
 def live(pid=1, price=34999, stock="Yes", city="INDORE", **extra):
     return {"product_id": str(pid), "product_name": "Samsung Double Door Refrigerator RT1",
             "product_sku": "RT" + str(pid), "product_mrp": price, "selling_price": price,
             "source": "live_api", "price_verified": price is not None,
+            "web_display": True, "web_display_verified": True,
+            "web_display_source": "live_api",
             "checked_at": "2026-09-30T12:00:00+00:00",
             **availability_fields(stock, live=True, city=city), **extra}
 
@@ -100,6 +102,27 @@ class LiveTests(unittest.TestCase):
         self.assertEqual([r["product_id"] for r in results], ["2"])
         self.assertEqual(results.verification["out_of_stock_count"], 1)
         self.assertTrue(results.verification["complete"])
+
+    def test_discovery_excludes_product_when_live_web_display_is_off(self):
+        results, response, _ = self.run_search(live(web_display=False))
+        self.assertEqual(results, [])
+        self.assertEqual(response["products"], [])
+        self.assertEqual(response["live_verification"]["web_hidden_count"], 1)
+        self.assertEqual(response["live_verification"]["web_visibility_unverified_count"], 0)
+
+    def test_semantic_search_requires_web_display_yes(self):
+        self.run_search(live())
+        self.assertEqual(self.search.index.query.call_args.kwargs["filter"]["web_display"],
+                         {"$eq": "YES"})
+
+    def test_missing_live_web_display_is_reported_but_not_assumed_hidden(self):
+        detail = live()
+        detail.pop("web_display")
+        detail["web_display_verified"] = False
+        detail["web_display_source"] = "unverified"
+        results, response, _ = self.run_search(detail)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(response["live_verification"]["web_visibility_unverified_count"], 1)
 
     def test_api_failure_shows_labelled_catalogue_price_and_marks_stock_unknown(self):
         _, response, _ = self.run_search({"error": "unavailable"})

@@ -929,7 +929,8 @@ class SmartSearch:
             requested, intent.brands, intent.categories, taxonomy, query, brand_match)
         if intent.price_min is not None and intent.price_max is not None and intent.price_min > intent.price_max:
             raise ValueError("Minimum budget exceeds maximum budget")
-        filters = {"source": {"$eq": "sql_snapshot"}, "embedding_model": {"$eq": EMBEDDING_MODEL}}
+        filters = {"source": {"$eq": "sql_snapshot"}, "embedding_model": {"$eq": EMBEDDING_MODEL},
+                   "web_display": {"$eq": "YES"}}
         if applied_brands:
             filters["brand"] = {"$in": applied_brands}
         if intent.categories:

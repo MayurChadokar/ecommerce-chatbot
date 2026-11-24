@@ -61,9 +61,16 @@ def merge_live(record, detail, city):
         result.pop(key, None)
     result.update(price=None, price_verified=False, price_source="unverified",
                   live_checked=True, source="sql_snapshot",
+                  web_display_verified=False, web_display_source="unverified",
                   catalogue_price=catalogue_price, catalogue_fallback=True,
                   verification_message="Current price and stock could not be verified.",
                   **availability_fields(city=city))
+    if isinstance(detail, dict) and detail.get("error_code") == "web_display_disabled":
+        result.update(web_display=False, web_display_verified=True,
+                      web_display_source="live_api", catalogue_fallback=False,
+                      verification_message="Product is not enabled for website display.")
+        result.pop("catalogue_price", None)
+        return result
     if not isinstance(detail, dict) or detail.get("error"):
         return result
     if str(detail.get("product_id")) != str(record["product_id"]):
@@ -76,6 +83,9 @@ def merge_live(record, detail, city):
     if detail.get("stock_city") != city:
         return result
     result.update(source="live_api", checked_at=detail.get("checked_at") or datetime.now(timezone.utc).isoformat())
+    if detail.get("web_display_verified"):
+        result.update(web_display=bool(detail.get("web_display")),
+                      web_display_verified=True, web_display_source="live_api")
     live_url = product_url(detail.get("uri_slug"), record["product_id"])
     if live_url:
         result.update(product_url=live_url, uri_slug=detail["uri_slug"])
@@ -135,6 +145,7 @@ def enrich(records, *, top_k, city, price_min=None, price_max=None, fetch=None):
         unknown_price = sum(not r["price_verified"] for r in merged)
         unknown_stock = sum(not r["stock_verified"] for r in merged)
         filtered = [r for r in merged if r["availability_status"] != "out_of_stock"
+                    and not (r.get("web_display_verified") and not r.get("web_display"))
                     and (not budget or budget_match(r))]
         if (len(filtered) >= top_k or unknown_price or unknown_stock
                 or len(candidates) >= min(20, len(records)) or time.monotonic() >= deadline):
@@ -156,6 +167,9 @@ def enrich(records, *, top_k, city, price_min=None, price_max=None, fetch=None):
         "enabled": True, "city": city, "candidate_count": len(candidates),
         "price_unverified_count": unknown_price, "stock_unverified_count": unknown_stock,
         "out_of_stock_count": sum(r["availability_status"] == "out_of_stock" for r in merged),
+        "web_hidden_count": sum(r.get("web_display_verified") and not r.get("web_display")
+                                for r in merged),
+        "web_visibility_unverified_count": sum(not r.get("web_display_verified") for r in merged),
         "complete": unknown_price == 0 and unknown_stock == 0,
         "catalogue_fallback_count": sum(bool(r.get("catalogue_fallback")) for r in filtered[:top_k]),
         "scope": "retrieved_candidates_only", "cached": False,
@@ -180,6 +194,7 @@ def live_card_fields(record):
         "price_verified", "price_source", "source", "checked_at", "verification_message",
         "snapshot_instock",
         "uri_slug",
+        "web_display", "web_display_verified", "web_display_source",
         "catalogue_fallback", "catalogue_price",
     ) if key in record}
     fields["product_mrp"] = f"₹{record['price']:,.2f}" if record.get("price_verified") else "Price unavailable"

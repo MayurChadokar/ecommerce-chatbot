@@ -58,6 +58,18 @@ class LiveAvailabilityTests(unittest.TestCase):
         self.assertEqual(result["product_url"], "https://www.lotuselectronics.com/product/smart-watch/current-watch/29133")
 
     @patch.dict(os.environ, {"LOTUS_AUTH_TOKEN": "test-token"})
+    @patch("tools.Product_details._http_session")
+    def test_live_web_display_off_is_not_returned_as_a_product(self, session):
+        session.return_value.post.return_value.json.return_value = {
+            "error": "0", "data": {"product_detail": {
+                **detail(29133), "web_display": "NO", "uri_slug": "hidden-watch"}}}
+        result = fetch_live_details(29133)
+        self.assertEqual(result["error_code"], "web_display_disabled")
+        self.assertFalse(result["web_display"])
+        self.assertTrue(result["web_display_verified"])
+        self.assertNotIn("selling_price", result)
+
+    @patch.dict(os.environ, {"LOTUS_AUTH_TOKEN": "test-token"})
     @patch("tools.Product_details.requests.post")
     def test_auth_missing_malformed_and_wrong_product_are_not_out_of_stock(self, post):
         for payload in ({"error": "1", "data": ""}, [], {"data": {}},
