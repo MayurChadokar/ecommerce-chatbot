@@ -857,15 +857,6 @@ class SmartSearch:
                         attributes.add(attr)
         return attributes
 
-    @staticmethod
-    def _verified_shopping_options(records):
-        """Public smart search never promotes catalogue fallbacks as live matches."""
-        return [record for record in records
-                if record.get("price_verified") is True
-                and record.get("stock_verified") is True
-                and record.get("availability_status") == "in_stock"
-                and record.get("web_display") is not False]
-
     def search(self, query, page=1, page_size=24, city="INDORE", brand_match="family", category="all"):
         source = self.catalogue
         if not source.is_available:
@@ -1010,7 +1001,6 @@ class SmartSearch:
         unknown = 0
         stock_unknown = 0
         out_of_stock = 0
-        web_hidden = 0
         # Page the verified matches, not raw candidates: sold-out or over-budget
         # products must not hide later available matches behind an empty page.
         # Recheck the prefix for numbered pages; live prices/stock are not cached.
@@ -1023,18 +1013,19 @@ class SmartSearch:
             unknown += batch.verification["price_unverified_count"]
             stock_unknown += batch.verification["stock_unverified_count"]
             out_of_stock += batch.verification.get("out_of_stock_count", 0)
-            web_hidden += batch.verification.get("web_hidden_count", 0)
-            matched.extend(self._verified_shopping_options(batch))
+            matched.extend(batch)
         verified = matched[start:target]
-        if not matched and (unknown or stock_unknown):
-            raise SearchUnavailable("Current product price or availability could not be verified; try again later")
+        if candidates and unknown == len(candidates) and not matched:
+            raise SearchUnavailable("Current product prices unavailable; try again later")
+        if not matched and unknown:
+            raise SearchUnavailable("Cannot confirm budget matches while current prices are unavailable")
         alternatives = []
         alternative_verification = None
         allow_alternatives = all(scope.get("_allowAlternatives", True) for scope in subtype_scopes)
         if not eligible and related_eligible and page == 1 and allow_alternatives:
             batch = self.verifier(related_eligible[:min(page_size, 6)], top_k=min(page_size, 6),
                                   city=city, price_min=intent.price_min, price_max=intent.price_max)
-            alternatives = [card(r) for r in self._verified_shopping_options(batch)]
+            alternatives = [card(r) for r in batch]
             alternative_verification = batch.verification
             resolution.update(status="alternatives" if alternatives else "no_matches",
                               relaxedAttributes=sorted(category_attributes))
@@ -1078,7 +1069,7 @@ class SmartSearch:
                            "scope": "ranked_candidates", "candidateLimit": self.WINDOW,
                            "windowMayBeTruncated": len(matches) >= self.WINDOW},
             "verification": {"city": city, "priceUnverifiedCount": unknown, "stockUnverifiedCount": stock_unknown,
-                             "outOfStockCount": out_of_stock, "webHiddenCount": web_hidden,
+                             "outOfStockCount": out_of_stock,
                              "complete": not unknown and not stock_unknown, "cached": False},
             "catalogueVersion": taxonomy["version"],
         }
