@@ -16,7 +16,8 @@ from live_product_enrichment import enrich
 from product_availability import availability_fields
 from product_index import EMBEDDING_MODEL
 from smart_search import (SmartSearch, SearchUnavailable, Interpretation,
-                          AIInterpretation, ai_interpret, deterministic, provider_schema, interpretation_prompt)
+                          AIInterpretation, ai_interpret, deterministic, provider_schema,
+                          interpretation_prompt, semantic_retrieval_query)
 from search_taxonomy import category_families
 from smart_search_api import create_smart_search_blueprint
 with patch.dict(os.environ, {"ENABLE_VECTOR_SEARCH": "false"}):
@@ -58,6 +59,23 @@ class SmartTests(unittest.TestCase):
         with patch.object(self.search, "interpret", return_value=(intent, "electronics", [], None, "ai")):
             self.search.search("electronics", category="all")
         self.assertNotIn("category", self.catalogue.index.query.call_args.kwargs["filter"])
+
+    def test_llm_grounded_intent_drives_semantic_retrieval_query(self):
+        intent = Interpretation(
+            brands=[], categories=["Gaming Laptop"], price_min=None,
+            price_max=60000, model="", attributes=[],
+            preferences=["college", "high performance"],
+        )
+        query = "college ke liye powerful gaming notebook dikhao under 60k"
+        with patch.object(self.search, "interpret",
+                          return_value=(intent, query.casefold(), [], None, "ai")):
+            result = self.search.search(query)
+        expected = "Gaming Laptop college high performance"
+        self.catalogue.model.encode.assert_called_once_with(expected, normalize_embeddings=True)
+        self.assertEqual(result["semanticQuery"], expected)
+        self.assertEqual(result["interpretationSource"], "ai")
+        self.assertNotIn("dikhao", result["semanticQuery"])
+        self.assertNotIn("notebook", result["semanticQuery"])
 
     def test_brand_only_all_searches_multiple_categories_without_ai(self):
         refrigerator = match("1")

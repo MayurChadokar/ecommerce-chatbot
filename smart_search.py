@@ -696,6 +696,14 @@ def literal_match(term, record):
     return " " + " ".join(tokens(term)) + " " in haystack
 
 
+def semantic_retrieval_query(intent, normalized_query):
+    """Build embedding text only from the grounded interpretation."""
+    parts = [*intent.brands, *intent.categories, intent.model,
+             *intent.attributes, *intent.preferences]
+    grounded = dict.fromkeys(part.strip() for part in parts if part and part.strip())
+    return " ".join(grounded) or normalized_query
+
+
 def card(record):
     return {"product_id": record["product_id"], "product_name": record["product_name"],
             "product_url": record["product_url"], "product_image": record.get("image_url", ""),
@@ -938,8 +946,7 @@ class SmartSearch:
         try:
             # Embed canonical intent after AI translation, not the original typo
             # or conversational filler. Filters and live budgets remain separate.
-            retrieval_query = " ".join([*intent.brands, *intent.categories, intent.model,
-                                        *intent.attributes, *intent.preferences]).strip() or normalized
+            retrieval_query = semantic_retrieval_query(intent, normalized)
             vector = source.model.encode(retrieval_query, normalize_embeddings=True).tolist()
             matches = source.index.query(vector=vector, namespace=source.settings.namespace,
                                          top_k=self.WINDOW, include_metadata=True, filter=filters).matches
@@ -1049,6 +1056,7 @@ class SmartSearch:
             "alternatives": alternatives, "clarificationRequired": False,
             "categoryResolution": {k: v for k, v in resolution.items() if k != "requiredTerms" and not k.startswith("_")},
             "message": category_notice or "Matching products found.",
+            "semanticQuery": retrieval_query,
             "interpretedQuery": intent.model_dump(),
             "appliedFilters": {**intent.model_dump(exclude={"preferences"}), "brands": applied_brands},
             "brandResolution": brand_resolution,
