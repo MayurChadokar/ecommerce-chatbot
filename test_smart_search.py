@@ -233,6 +233,19 @@ class SmartTests(unittest.TestCase):
         # A recognized product category should not cause an extra SKU lookup.
         self.catalogue.index.query.assert_called_once()
 
+    def test_priced_laptop_family_and_safe_budget_typo_skip_ai(self):
+        categories = self.configure_laptops()
+        result = self.search.search("show me laptops underr 85000", page_size=6)
+        self.assertEqual(result["appliedFilters"]["categories"], categories)
+        self.assertEqual(result["appliedFilters"]["price_max"], 85000)
+        self.assertEqual(result["interpretationSource"], "catalogue")
+        self.assertEqual(result["corrections"], [{"from": "underr", "to": "under"}])
+        self.assertIn("requested budget", result["products"][0]["matchReason"])
+        self.assertEqual(set(result["timing"]),
+                         {"interpretationMs", "catalogueMs", "verificationMs", "totalMs"})
+        self.assertGreaterEqual(result["timing"]["totalMs"], 0)
+        self.ai.with_structured_output.assert_not_called()
+
     def test_ambiguous_source_label_is_repaired_by_ai_not_expanded_in_code(self):
         categories = self.configure_laptops()
         invoke = self.ai.with_structured_output.return_value.invoke
@@ -1112,6 +1125,14 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["status"], "success")
         self.assertEqual(response.headers["Cache-Control"], "no-store")
+        self.assertEqual(search.call_args.args[2], 12)
+
+    @patch("smart_search_api.SmartSearch.search")
+    def test_explicit_page_size_is_preserved(self, search):
+        search.return_value = {"products": []}
+        response = self.client.post("/api/search/smart", json={"query": "fridge", "pageSize": 24})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(search.call_args.args[2], 24)
 
     @patch("smart_search_api.SmartSearch.search", side_effect=SearchUnavailable("Unavailable"))
     def test_error_envelope(self, _):

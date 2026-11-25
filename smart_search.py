@@ -86,7 +86,7 @@ def provider_schema(taxonomy=None):
     return result
 
 
-ALIASES = {"voltus": "voltas", "refregistor": "refrigerator",
+ALIASES = {"voltus": "voltas", "underr": "under", "refregistor": "refrigerator",
            "refrigirator": "refrigerator", "refrigator": "refrigerator",
            "fridge": "refrigerator", "फ्रिज": "refrigerator",
            "रेफ्रिजरेटर": "refrigerator", "सैमसंग": "samsung",
@@ -231,10 +231,10 @@ def deterministic(query, taxonomy):
 
 def ai_timeout():
     try:
-        value = float(os.getenv("SMART_SEARCH_AI_TIMEOUT", "12"))
-        return value if math.isfinite(value) and 0 < value <= 15 else 12.0
+        value = float(os.getenv("SMART_SEARCH_AI_TIMEOUT", "5"))
+        return value if math.isfinite(value) and 0 < value <= 15 else 5.0
     except ValueError:
-        return 12.0
+        return 5.0
 
 
 def canonicalize_labels(result, taxonomy):
@@ -735,6 +735,17 @@ class SmartSearch:
         # not depend on a provider deciding which product category it belongs to.
         if base.brands and not (base.categories or base.attributes or base.preferences):
             return base, normalized, corrections, None, "catalogue"
+        # A priced request for one exact category or a catalogue-derived family
+        # is already complete. Avoid provider latency for common searches such
+        # as "laptop under 85000" while keeping descriptive requests (gaming,
+        # college use, lightweight, etc.) on the semantic interpretation path.
+        families = category_families(taxonomy["categories"])
+        complete_category_scope = (len(base.categories) == 1 or any(
+            set(base.categories) == set(scope) for scope in families.values()))
+        if (base.categories and complete_category_scope and not base.brands
+                and not (base.attributes or base.preferences or base.model)
+                and (base.price_min is not None or base.price_max is not None)):
+            return base, normalized, corrections, None, "catalogue"
         # A broad family may contain source buckets which a known brand does
         # not sell (for example, Dell + the complete laptop family includes
         # MacBook). If the catalogue has a direct, unambiguous subset for that
@@ -858,6 +869,7 @@ class SmartSearch:
         return attributes
 
     def search(self, query, page=1, page_size=24, city="INDORE", brand_match="family", category="all"):
+        search_started = time.monotonic()
         source = self.catalogue
         if not source.is_available:
             raise SearchUnavailable("Product catalogue unavailable")
@@ -889,7 +901,9 @@ class SmartSearch:
         interpretation_query = query
         if selected and (not lexical.categories or resolution["matchType"] in {"unknown", "attribute"}):
             interpretation_query += " " + category.strip()
+        interpretation_started = time.monotonic()
         intent, normalized, corrections, fallback, interpretation_source = self.interpret(interpretation_query, taxonomy, brand_match)
+        interpretation_ms = round((time.monotonic() - interpretation_started) * 1000, 1)
         intent = intent.model_copy(deep=True)
         if intent._category_status != "supported":
             resolution.update(status="clarification_required" if intent._category_status == "ambiguous" else "unavailable",
@@ -943,6 +957,7 @@ class SmartSearch:
             filters["brand"] = {"$in": applied_brands}
         if intent.categories:
             filters["category"] = {"$in": intent.categories}
+        catalogue_started = time.monotonic()
         try:
             # Embed canonical intent after AI translation, not the original typo
             # or conversational filler. Filters and live budgets remain separate.
@@ -963,6 +978,7 @@ class SmartSearch:
                 records = [r for m in exact if (r := source._record(m.id, m.metadata or {}, m.score))] + records
         except Exception:
             raise SearchUnavailable("Product catalogue query failed") from None
+        catalogue_ms = round((time.monotonic() - catalogue_started) * 1000, 1)
         seen = set()
         eligible = []
         related_eligible = []
@@ -1001,6 +1017,7 @@ class SmartSearch:
         unknown = 0
         stock_unknown = 0
         out_of_stock = 0
+        verification_ms = 0.0
         # Page the verified matches, not raw candidates: sold-out or over-budget
         # products must not hide later available matches behind an empty page.
         # Recheck the prefix for numbered pages; live prices/stock are not cached.
@@ -1008,8 +1025,10 @@ class SmartSearch:
             size = min(20, target - len(matched), len(eligible) - len(candidates))
             chunk = eligible[len(candidates):len(candidates) + size]
             candidates.extend(chunk)
+            verification_started = time.monotonic()
             batch = self.verifier(chunk, top_k=size,
                                   city=city, price_min=intent.price_min, price_max=intent.price_max)
+            verification_ms += (time.monotonic() - verification_started) * 1000
             unknown += batch.verification["price_unverified_count"]
             stock_unknown += batch.verification["stock_unverified_count"]
             out_of_stock += batch.verification.get("out_of_stock_count", 0)
@@ -1051,8 +1070,35 @@ class SmartSearch:
         elif requested_category and resolution["matchType"] in {"family", "equivalent", "semantic", "attribute"}:
             category_notice = f"Interpreted '{requested_category}' within the matching catalogue categories."
         more = len(candidates) < len(eligible)
+        def match_reason(record):
+            reasons = []
+            if record.get("brand") in applied_brands:
+                reasons.append(f"{record['brand']} brand")
+            if record.get("category") in intent.categories:
+                reasons.append(record["category"])
+            matched_specs = [value for value in [*intent.attributes, intent.model]
+                             if value and literal_match(value, record)]
+            if matched_specs:
+                reasons.append("specs: " + ", ".join(matched_specs[:3]))
+            if intent.price_min is not None or intent.price_max is not None:
+                reasons.append("requested budget")
+            if not reasons:
+                reasons.append("semantic relevance")
+            return "Matched " + " + ".join(reasons)
+
+        product_cards = []
+        for record in verified:
+            product = card(record)
+            product["matchReason"] = match_reason(record)
+            product_cards.append(product)
+        timing = {
+            "interpretationMs": interpretation_ms,
+            "catalogueMs": catalogue_ms,
+            "verificationMs": round(verification_ms, 1),
+            "totalMs": round((time.monotonic() - search_started) * 1000, 1),
+        }
         result = {
-            "query": query, "selectedCategory": category.strip(), "normalizedQuery": normalize(query), "products": [card(r) for r in verified],
+            "query": query, "selectedCategory": category.strip(), "normalizedQuery": normalize(query), "products": product_cards,
             "alternatives": alternatives, "clarificationRequired": False,
             "categoryResolution": {k: v for k, v in resolution.items() if k != "requiredTerms" and not k.startswith("_")},
             "message": category_notice or "Matching products found.",
@@ -1072,6 +1118,7 @@ class SmartSearch:
                              "outOfStockCount": out_of_stock,
                              "complete": not unknown and not stock_unknown, "cached": False},
             "catalogueVersion": taxonomy["version"],
+            "timing": timing,
         }
         if alternative_verification is not None:
             result["alternativeVerification"] = alternative_verification

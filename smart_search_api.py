@@ -43,7 +43,9 @@ def create_smart_search_blueprint(catalogue, ai_client):
         if not isinstance(category, str) or not 1 <= len(category.strip()) <= 100:
             return jsonify(status="error", error="category must contain 1 to 100 characters"), 400
         query, city = body.get("query"), body.get("city", "INDORE")
-        page, size = body.get("page", 1), body.get("pageSize", 24)
+        # Keep the first paint bounded: twelve live price/stock checks fit in a
+        # single verification wave. Clients can request up to 48 explicitly.
+        page, size = body.get("page", 1), body.get("pageSize", 12)
         brand_match = body.get("brandMatch", "family")
         if not isinstance(brand_match, str) or brand_match not in {"family", "exact"}:
             return jsonify(status="error", error="brandMatch must be family or exact"), 400
