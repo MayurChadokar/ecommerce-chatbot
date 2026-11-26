@@ -1163,11 +1163,14 @@ def chat_with_agent(message: str, session_id: str = "default_session", *,
     if product_id is None:
         # Explicit recommendation ranges can skip two model round-trips.
         from chat_fast_path import (fast_budget_recommendation,
+                                    fast_model_code_search,
                                     fast_portable_ac_alternatives,
                                     fast_replacement_policy,
                                     fast_return_policy)
         try:
-            fast_response = fast_replacement_policy(message)
+            fast_response = fast_model_code_search(message, city=city)
+            if fast_response is None:
+                fast_response = fast_replacement_policy(message)
             if fast_response is None:
                 fast_response = fast_return_policy(message)
             if fast_response is None:
@@ -1191,7 +1194,8 @@ def chat_with_agent(message: str, session_id: str = "default_session", *,
             actions["preserve_product_message"] = True
             actions["live_products"] = {
                 str(card["product_id"]): card
-                for card in fast_response.get("recommendations", [])
+                for card in [*fast_response.get("recommendations", []),
+                             *fast_response.get("products", [])]
                 if isinstance(card, dict) and card.get("product_id")
             }
             response = json.dumps(fast_response, ensure_ascii=False)

@@ -96,6 +96,27 @@ def fast_unclear_message(message):
         "comparison": [], "recommendations": [], "ticket": {}, "bulk_enquiry": {},
         "end": "",
     }
+
+
+def fast_model_code_search(message: str, city="INDORE"):
+    """Search an unambiguous compact model code without an LLM round-trip."""
+    if not isinstance(message, str):
+        return None
+    query = message.strip()
+    if not re.fullmatch(r"[A-Za-z]{1,8}[- ]?\d{1,4}[A-Za-z0-9-]*", query):
+        return None
+    from tools.product_search_tool import product_search_instance
+    results = product_search_instance.search_products(query, top_k=5, city=city)
+    payload = json.loads(product_search_instance.format_results(results, query=query, top_k=5))
+    products = payload.get("products", [])
+    return {
+        "answer": (f"Here are products matching {query}." if products else
+                   f"No matching products were found for {query}."),
+        "products": products,
+        "product_details": {}, "stores": [], "policy_info": {},
+        "comparison": [], "recommendations": [], "ticket": {}, "bulk_enquiry": {},
+        "end": "Would you like details or a comparison?" if products else "",
+    }
 _CATEGORIES = {
     "smartphone": ("smartphone", "smartphones", "smart phone", "mobile", "mobiles", "phone", "phones"),
     "laptop": ("laptop", "laptops", "notebook", "notebooks"),
@@ -221,6 +242,6 @@ def fast_portable_ac_alternatives(message: str, city="INDORE"):
             "end": "You can check with a Lotus store for availability outside the online catalogue."}
 
 
-__all__ = ["BudgetRange", "fast_unclear_message", "fast_replacement_policy", "fast_return_policy",
+__all__ = ["BudgetRange", "fast_unclear_message", "fast_model_code_search", "fast_replacement_policy", "fast_return_policy",
            "parse_budget_range", "fast_budget_recommendation",
            "fast_portable_ac_alternatives"]
