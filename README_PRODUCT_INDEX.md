@@ -234,6 +234,37 @@ stable IDs, and its observed sorting/page error before building an incremental
 importer. Do not import only the first ten returned products or delete catalogue
 records on the basis of a failed/partial API read.
 
+### Incremental sitemap ingestion
+
+Website-visible products can be added safely to the active namespace from the
+public sitemap. The command compares sitemap product IDs with Pinecone first;
+its default mode is read-only and writes only a local report:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.sync_sitemap_to_pinecone --offline
+```
+
+After reviewing `artifacts/product-index/sitemap-sync.json`, explicitly upsert
+missing products with:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.sync_sitemap_to_pinecone --offline --apply
+```
+
+To test the complete fetch and embedding flow locally without a Pinecone write:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.sync_sitemap_to_pinecone --offline --prepare-only --max-products 2
+```
+
+Prepared vectors are written to
+`artifacts/product-index/sitemap-vectors.jsonl` and are not uploaded.
+
+The sitemap supplies visibility, canonical URLs and stable IDs; the authenticated
+live detail API supplies names, prices and specifications. The command creates
+embeddings locally, never deletes existing vectors, never changes `.env`, and
+does not need an application restart because it uses the active namespace.
+
 Offline regression checks (no provider calls; the suite uses temporary databases):
 
 ```powershell
