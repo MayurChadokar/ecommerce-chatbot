@@ -221,11 +221,18 @@ def deterministic(query, taxonomy):
     preferences = [p for p in PREFERENCES if re.search(phrase_pattern(p), remaining)]
     words = [w for w in remaining.split() if w not in STOP and w not in preferences]
     residual = " ".join(words).strip(" ?!.,")
+    # Compact alpha-numeric strings are normally catalogue model codes (F35,
+    # S24, A55, RT1), not product categories or soft attributes. Resolve these
+    # locally so provider classification cannot stop before Pinecone retrieval.
+    model = residual if re.fullmatch(
+        r"(?=[a-z0-9-]*[a-z])(?=[a-z0-9-]*\d)[a-z0-9]+(?:-[a-z0-9]+)*", residual
+    ) else ""
     # Literal terms remain mandatory even when interpretation fails. Keep units
     # with their numbers (256 GB) so they cannot match unrelated numeric fields.
-    attributes = re.findall(r"\d+(?:\.\d+)?\s*(?:gb|tb|litres?|liters?|l|inch|ton|star)\b|[^\s,?!]+", residual)
+    attributes = ([] if model else
+                  re.findall(r"\d+(?:\.\d+)?\s*(?:gb|tb|litres?|liters?|l|inch|ton|star)\b|[^\s,?!]+", residual))
     return LexicalIntent(brands=brands, categories=sorted(categories), price_min=low,
-                          price_max=high, model="", attributes=attributes,
+                          price_max=high, model=model, attributes=attributes,
                           preferences=sorted(preferences)), text, corrections
 
 
@@ -734,6 +741,9 @@ class SmartSearch:
         # Catalogue brand identity is already exact. A brand-only request must
         # not depend on a provider deciding which product category it belongs to.
         if base.brands and not (base.categories or base.attributes or base.preferences):
+            return base, normalized, corrections, None, "catalogue"
+        if (base.model and not base.brands and not base.categories
+                and not base.attributes and not base.preferences):
             return base, normalized, corrections, None, "catalogue"
         # A priced request for one exact category or a catalogue-derived family
         # is already complete. Avoid provider latency for common searches such

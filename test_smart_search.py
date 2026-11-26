@@ -624,6 +624,19 @@ class SmartTests(unittest.TestCase):
         self.assertEqual(result["products"][0]["sku"], "RT1")
         self.assertEqual(self.catalogue.index.query.call_args.kwargs["filter"]["sku"], {"$eq": "RT1"})
 
+    def test_compact_model_code_searches_catalogue_without_ai_category_gate(self):
+        f35 = match("43253", brand="Oppo", sku="CPH2931",
+                    name="Oppo Android Smartphone F35 5G 6GB 128GB")
+        f35.metadata["category"] = "Android Smartphone"
+        self.catalogue.index.query.return_value = SimpleNamespace(matches=[f35])
+        result = self.search.search("F35")
+        self.assertEqual(result["products"][0]["product_id"], "43253")
+        self.assertEqual(result["appliedFilters"]["model"], "f35")
+        self.assertEqual(result["appliedFilters"]["attributes"], [])
+        self.assertEqual(result["interpretationSource"], "catalogue")
+        self.assertEqual(result["pagination"]["evaluatedCandidates"], 1)
+        self.ai.with_structured_output.assert_not_called()
+
     def test_no_chat_imports_in_search_path(self):
         for path in ("smart_search.py", "smart_search_api.py"):
             tree = ast.parse(Path(path).read_text(encoding="utf-8"))
