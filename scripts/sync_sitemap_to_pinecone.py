@@ -51,15 +51,17 @@ def sitemap_products(xml_text):
     return products
 
 
-def missing_ids(index, namespace, product_ids, batch_size=500):
+def missing_ids(index, namespace, product_ids, batch_size=100, timeout=20, progress=None):
     """Fetch IDs in bounded batches and return IDs absent from Pinecone."""
     missing = []
     ordered = sorted(product_ids, key=int)
     for start in range(0, len(ordered), batch_size):
         batch = ordered[start:start + batch_size]
-        response = index.fetch(ids=batch, namespace=namespace)
+        response = index.fetch(ids=batch, namespace=namespace, timeout=timeout)
         present = set((getattr(response, "vectors", None) or {}).keys())
         missing.extend(pid for pid in batch if pid not in present)
+        if progress:
+            progress(min(start + batch_size, len(ordered)), len(ordered))
     return missing
 
 
@@ -156,7 +158,11 @@ def run(args):
     response = requests.get(args.sitemap, timeout=(3, args.timeout))
     response.raise_for_status()
     catalogue = sitemap_products(response.text)
-    missing = missing_ids(index, config.namespace, catalogue)
+    missing = missing_ids(
+        index, config.namespace, catalogue,
+        batch_size=args.fetch_batch_size, timeout=args.timeout,
+        progress=lambda done, total: print(f"Compared {done}/{total} sitemap IDs", flush=True),
+    )
     selected = missing[:args.max_products] if args.max_products else missing
     report = {
         "checked_at": datetime.now(timezone.utc).isoformat(),
@@ -232,12 +238,15 @@ def main():
     parser.add_argument("--offline", action="store_true", help="Use only the locally cached embedding model")
     parser.add_argument("--max-products", type=int, default=0, help="Limit this run; 0 means all missing products")
     parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--fetch-batch-size", type=int, default=100,
+                        help="Pinecone IDs per read-only fetch request")
     parser.add_argument("--timeout", type=float, default=15)
     parser.add_argument("--delay", type=float, default=0.05, help="Delay between detail requests")
     args = parser.parse_args()
     if args.apply and args.prepare_only:
         parser.error("Choose either --apply or --prepare-only")
-    if not 1 <= args.batch_size <= 64 or args.max_products < 0 or not 1 <= args.timeout <= 60 or not 0 <= args.delay <= 5:
+    if (not 1 <= args.batch_size <= 64 or not 1 <= args.fetch_batch_size <= 200
+            or args.max_products < 0 or not 1 <= args.timeout <= 60 or not 0 <= args.delay <= 5):
         parser.error("Invalid batch-size, max-products, timeout, or delay")
     try:
         run(args)

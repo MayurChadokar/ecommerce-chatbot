@@ -22,6 +22,7 @@ class SitemapSyncTests(unittest.TestCase):
         index.fetch.side_effect = [SimpleNamespace(vectors={"1": object()}),
                                    SimpleNamespace(vectors={"3": object(), "4": object()})]
         self.assertEqual(missing_ids(index, "live", {"1", "2", "3", "4"}, batch_size=2), ["2"])
+        self.assertEqual(index.fetch.call_args.kwargs["timeout"], 20)
 
     def test_builds_runtime_compatible_metadata(self):
         entry = {"url": "https://www.lotuselectronics.com/product/iphones/apple-phone/42365",
