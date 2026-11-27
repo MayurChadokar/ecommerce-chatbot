@@ -1152,6 +1152,37 @@ def chat_with_agent(message: str, session_id: str = "default_session", *,
     Wraps `_run_agent` so every turn's assistant answer is logged to SQLite for
     the admin portal. Logging failures never affect the returned response.
     """
+    # A repeat requester often sends only their mobile after saying they want
+    # another ticket. Check today's support tickets globally, including when a
+    # customer starts a completely new chat/session.
+    if product_id is None:
+        phone_match = re.search(
+            r"(?<!\d)(?:\+?91[\s-]*)?([6-9](?:[\s-]*\d){9})(?!\d)",
+            str(message or ""),
+        )
+        digits = re.sub(r"\D", "", phone_match.group(1)) if phone_match else ""
+        if digits:
+            try:
+                existing_ticket = store.get_todays_ticket_by_phone(digits)
+            except Exception:
+                existing_ticket = {}
+            if existing_ticket:
+                from tools.ticket_tools import DUPLICATE_TICKET_MESSAGE
+                duplicate_response = {
+                    "answer": DUPLICATE_TICKET_MESSAGE,
+                    "products": [], "product_details": {}, "stores": [],
+                    "policy_info": {}, "comparison": [], "recommendations": [],
+                    "ticket": {}, "bulk_enquiry": {},
+                    "end": "Is there anything else I can help you with?",
+                }
+                response = json.dumps(duplicate_response, ensure_ascii=False)
+                store.log_message(session_id, "user", message)
+                store.log_message(
+                    session_id, "assistant", DUPLICATE_TICKET_MESSAGE,
+                    response_json=response,
+                )
+                return response
+
     from chat_fast_path import fast_unclear_message
     unclear = fast_unclear_message(message) if product_id is None else None
     if unclear is not None:

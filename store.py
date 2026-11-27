@@ -24,6 +24,14 @@ from typing import Any, Dict, List, Optional
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lotus_app.db")
 
 
+def _normalise_indian_phone(phone: str) -> str:
+    """Return the comparable 10-digit form used for ticket de-duplication."""
+    digits = "".join(character for character in str(phone or "") if character.isdigit())
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    return digits
+
+
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10)
     conn.row_factory = sqlite3.Row
@@ -510,13 +518,39 @@ def seed_orders() -> None:
 # --------------------------------------------------------------------------- #
 # Support tickets
 # --------------------------------------------------------------------------- #
+def get_todays_ticket_by_phone(phone: str) -> Dict[str, Any]:
+    """Return today's most recent ticket for a mobile number, using the IST day."""
+    normalised_phone = _normalise_indian_phone(phone)
+    if not normalised_phone:
+        return {}
+    try:
+        with closing(_connect()) as conn:
+            rows = conn.execute(
+                "SELECT * FROM tickets "
+                "WHERE date(created_at, '+5 hours', '+30 minutes') = "
+                "date('now', '+5 hours', '+30 minutes') "
+                "AND lower(trim(issue)) <> 'sales enquiry' "
+                "ORDER BY rowid DESC"
+            ).fetchall()
+            match = next(
+                (row for row in rows
+                 if _normalise_indian_phone(row["phone"]) == normalised_phone),
+                None,
+            )
+            return dict(match) if match is not None else {}
+    except Exception as e:  # pragma: no cover - defensive
+        print(f"store.get_todays_ticket_by_phone failed: {type(e).__name__}: {e}")
+        return {}
+
+
 def create_ticket(session_id: Optional[str], name: str, phone: str, issue: str) -> Dict[str, Any]:
-    """Create a support ticket and return it."""
+    """Create a support ticket, at most once per phone number per IST day."""
     created = datetime.utcnow()
+    normalised_phone = _normalise_indian_phone(phone)
     record = {
         "session_id": session_id,
         "name": (name or "").strip(),
-        "phone": (phone or "").strip(),
+        "phone": normalised_phone or (phone or "").strip(),
         "issue": (issue or "").strip(),
         "status": "Open",
         "created_at": created.isoformat(),
@@ -526,6 +560,26 @@ def create_ticket(session_id: Optional[str], name: str, phone: str, issue: str) 
             # Allocate and insert under the same lock across all Gunicorn workers.
             # A failed insert rolls back the counter as well as the ticket.
             conn.execute("BEGIN IMMEDIATE")
+            todays_tickets = []
+            if record["issue"].casefold() != "sales enquiry":
+                todays_tickets = conn.execute(
+                    "SELECT * FROM tickets "
+                    "WHERE date(created_at, '+5 hours', '+30 minutes') = "
+                    "date('now', '+5 hours', '+30 minutes') "
+                    "AND lower(trim(issue)) <> 'sales enquiry' "
+                    "ORDER BY rowid DESC"
+                ).fetchall()
+            duplicate = next(
+                (row for row in todays_tickets
+                 if normalised_phone
+                 and _normalise_indian_phone(row["phone"]) == normalised_phone),
+                None,
+            )
+            if duplicate is not None:
+                existing = dict(duplicate)
+                existing["duplicate"] = True
+                return existing
+
             conn.execute("CREATE TABLE IF NOT EXISTS ticket_sequence "
                          "(id INTEGER PRIMARY KEY CHECK (id = 1), last_number INTEGER NOT NULL)")
             sequence = conn.execute("SELECT last_number FROM ticket_sequence WHERE id=1").fetchone()

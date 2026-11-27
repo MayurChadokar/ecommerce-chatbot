@@ -16,6 +16,12 @@ from tools.session_context import get_current_session
 from tools.ticket_email import queue_ticket_email
 
 
+DUPLICATE_TICKET_MESSAGE = (
+    "We have already received your support ticket today. Our support team will "
+    "review it and get in touch with you shortly."
+)
+
+
 class RaiseTicketInput(BaseModel):
     name: str = Field(..., description="The customer's name")
     phone: str = Field(..., description="The customer's phone number")
@@ -63,7 +69,7 @@ def raise_ticket_tool(name: str, phone: str, issue: str) -> Dict[str, Any]:
         return {"error": "I still need the name, phone number and a short description of the issue."}
 
     ticket = store.create_ticket(get_current_session(), name, phone, issue)
-    if not ticket.get("error") and ticket.get("ticket_id"):
+    if not ticket.get("error") and ticket.get("ticket_id") and not ticket.get("duplicate"):
         queue_ticket_email(ticket)
     return ticket
 
@@ -71,6 +77,12 @@ def raise_ticket_tool(name: str, phone: str, issue: str) -> Dict[str, Any]:
 def normalize_ticket_response(response: dict, ticket: dict, current_message: str = "") -> dict:
     """Expose only a successfully saved ticket from this exact chat turn."""
     model_ticket = response.pop("ticket", None)
+    if ticket.get("duplicate"):
+        response.pop("ticket", None)
+        response["answer"] = DUPLICATE_TICKET_MESSAGE
+        response["end"] = "Is there anything else I can help you with?"
+        return response
+
     if ticket.get("ticket_id") and not ticket.get("error"):
         response["ticket"] = ticket
         response["answer"] = (f"Your support ticket {ticket['ticket_id']} has been raised successfully. "
